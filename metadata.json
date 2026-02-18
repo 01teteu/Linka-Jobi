@@ -1,0 +1,7 @@
+{
+  "name": "Linka Jobi",
+  "description": "Um marketplace de serviços conectando freelancers e contratantes com foco em comunicação rápida, correspondência baseada em localização e propostas de trabalho seguras.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
