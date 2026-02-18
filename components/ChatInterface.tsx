@@ -11,9 +11,10 @@ interface ChatInterfaceProps {
     onSendMessage: (chatId: number, text: string) => void;
     onRefresh?: () => void;
     onComplete?: (proposalId: number) => void;
+    className?: string; // Allow external styling override
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessage, onRefresh, onComplete }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessage, onRefresh, onComplete, className }) => {
     const [activeChatId, setActiveChatId] = useState<number>(0);
     const [newMessage, setNewMessage] = useState('');
     const [showList, setShowList] = useState(true);
@@ -48,9 +49,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
     const handleSendText = (e: React.FormEvent) => {
         e.preventDefault();
         if(!newMessage.trim()) return;
-        Backend.sendMessage(activeChatId, user.id, newMessage, 'text');
+        onSendMessage(activeChatId, newMessage);
         setNewMessage('');
-        onRefresh?.();
     };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,19 +144,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
 
     if (chats.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-[70vh] text-textMuted animate-fade-in-up px-8 text-center bg-white rounded-[2.5rem] border border-gray-100 shadow-xl m-4">
+            <div className={`flex flex-col items-center justify-center text-textMuted animate-fade-in-up px-8 text-center bg-white rounded-[2.5rem] border border-gray-100 shadow-xl m-4 ${className || "h-[70vh]"}`}>
                 <div className="w-28 h-28 bg-gray-50 rounded-full flex items-center justify-center mb-6 relative">
                     <MessageSquare size={48} className="text-gray-300" />
                     <div className="absolute top-0 right-0 w-8 h-8 bg-primary rounded-full animate-bounce"></div>
                 </div>
-                <h3 className="text-2xl font-black text-textMain mb-2">Sua caixa de entrada está vazia</h3>
-                <p className="font-medium text-sm max-w-xs">Quando você fechar um job ou receber uma proposta, o chat aparecerá aqui para você negociar.</p>
+                <h3 className="text-2xl font-black text-textMain mb-2">Nenhuma conversa encontrada</h3>
+                <p className="font-medium text-sm max-w-xs">O histórico de mensagens aparecerá aqui.</p>
             </div>
         );
     }
 
+    const containerClasses = className || "max-w-5xl mx-auto h-[calc(100vh-140px)] flex flex-col md:flex-row animate-fade-in-up bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative";
+
     return (
-        <div className="max-w-5xl mx-auto h-[calc(100vh-140px)] flex flex-col md:flex-row animate-fade-in-up bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative">
+        <div className={containerClasses}>
             
             {/* --- SIDEBAR (LISTA DE CHATS) --- */}
             <div className={`w-full md:w-[320px] bg-white border-r border-gray-100 flex-col z-20 ${showList ? 'flex' : 'hidden md:flex'}`}>
@@ -167,7 +169,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
                     {chats.map(chat => {
+                        // For Admin, show both participants in the title if possible, or just the one that isn't me (which is impossible if I'm admin and not in the chat, so show logic handles "me" vs "other")
                         const other = chat.participants.find(p => p.id !== user.id);
+                        // If I am admin (999) and chat is between 1 and 2, 'other' will be 1 (first found).
+                        
                         const isActive = activeChatId === chat.id;
                         const isDone = chat.proposalStatus === ProposalStatus.COMPLETED;
                         

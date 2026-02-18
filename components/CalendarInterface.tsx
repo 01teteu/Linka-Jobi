@@ -2,15 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { Appointment, User } from '../types';
 import { Backend } from '../services/mockBackend';
-import { Calendar, Clock, MapPin, CheckCircle2, AlertCircle, MessageCircle, ChevronRight, Loader2, PartyPopper, Hourglass } from 'lucide-react';
+import { Calendar, Clock, MapPin, CheckCircle2, AlertCircle, MessageCircle, ChevronRight, Loader2, PartyPopper, Hourglass, FileText } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface CalendarInterfaceProps {
     user: User;
-    onOpenChat: (chatId: number) => void;
+    onViewProposal: (proposalId: number) => void;
 }
 
-const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onOpenChat }) => {
+const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onViewProposal }) => {
     const { addToast } = useToast();
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -18,7 +18,6 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onOpenChat 
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            // Simula delay para sensação de "carregando dados reais"
             await new Promise(r => setTimeout(r, 600));
             try {
                 const apps = await Backend.getUserAppointments(user.id);
@@ -64,10 +63,13 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onOpenChat 
     };
 
     const handleAppointmentClick = (app: Appointment) => {
-        if (app.chatId) {
-            onOpenChat(app.chatId);
+        // Extrai o ID numérico do job (ex: "job_123" -> 123)
+        const idParts = app.id.split('_');
+        if (idParts.length > 1) {
+            const proposalId = parseInt(idParts[1]);
+            onViewProposal(proposalId);
         } else {
-            addToast("Aguarde um profissional aceitar para iniciar o chat.", "info");
+            addToast("Detalhes indisponíveis.", "error");
         }
     };
 
@@ -89,7 +91,7 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onOpenChat 
 
             {/* NEXT APPOINTMENT HERO CARD */}
             {nextAppointment ? (
-                <div className="bg-gradient-to-br from-primary to-indigo-600 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-primary/30 mb-10 relative overflow-hidden group cursor-pointer" onClick={() => nextAppointment.chatId && onOpenChat(nextAppointment.chatId)}>
+                <div className="bg-gradient-to-br from-primary to-indigo-600 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-primary/30 mb-10 relative overflow-hidden group cursor-pointer" onClick={() => handleAppointmentClick(nextAppointment)}>
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-white/20 transition-all"></div>
                     
                     <div className="relative z-10">
@@ -178,7 +180,8 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onOpenChat 
                                                 </span>
                                             </div>
                                             <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                                                {app.chatId ? <MessageCircle size={14} /> : <Hourglass size={14} />}
+                                                {/* Icone de Detalhes em vez de Chat direto */}
+                                                <FileText size={14} />
                                             </div>
                                         </div>
                                         

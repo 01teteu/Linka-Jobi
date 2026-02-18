@@ -50,7 +50,7 @@ export const DEFAULT_SERVICES: ServiceSubItem[] = [
   { id: 'serv_support', name: 'Suporte Técnico', emoji: '', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?q=80&w=400&auto=format&fit=crop' },
   // Imagem corrigida para Designer Gráfico (Setup criativo confiável)
   { id: 'serv_design', name: 'Designer Gráfico', emoji: '', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600&auto=format&fit=crop' },
-  { id: 'serv_video', name: 'Editor de Vídeo', emoji: '', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_video', name: 'Editor de Vídeo', emoji: '', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600&auto=format&fit=crop' },
   { id: 'serv_marketing', name: 'Gestor de Tráfego', emoji: '', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&auto=format&fit=crop' },
 
   // --- CASA ---

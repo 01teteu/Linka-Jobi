@@ -10,6 +10,25 @@ interface AuthScreenProps {
   onLogin: (user: any) => void;
 }
 
+// Helpers para máscaras
+const applyPhoneMask = (value: string) => {
+    // Remove tudo que não é dígito
+    const numbers = value.replace(/\D/g, '');
+    
+    // Limita a 11 dígitos
+    const limit = numbers.slice(0, 11);
+
+    // Aplica a máscara (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
+    return limit
+      .replace(/^(\d{2})(\d)/g, '($1) $2')
+      .replace(/(\d)(\d{4})$/, '$1-$2');
+};
+
+const applyCepMask = (value: string) => {
+    const numbers = value.replace(/\D/g, '').slice(0, 8);
+    return numbers.replace(/^(\d{5})(\d)/, '$1-$2');
+};
+
 const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const { addToast } = useToast();
   const [viewState, setViewState] = useState<'login' | 'register' | 'forgot'>('login');
@@ -54,6 +73,27 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
         if (!phone || !cep) {
             throw new Error("Por favor, preencha telefone e CEP.");
         }
+        if (phone.length < 14) {
+            throw new Error("Telefone inválido. Use o formato (DDD) 99999-9999.");
+        }
+        if (cep.length < 9) {
+            throw new Error("CEP inválido. Use o formato 00000-000.");
+        }
+
+        // Validação de Senha Forte
+        if (password.length < 8) {
+            throw new Error("A senha deve ter no mínimo 8 caracteres.");
+        }
+        if (!/[A-Z]/.test(password)) {
+            throw new Error("A senha deve conter pelo menos uma letra maiúscula.");
+        }
+        if (!/[0-9]/.test(password)) {
+            throw new Error("A senha deve conter pelo menos um número.");
+        }
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+            throw new Error("A senha deve conter pelo menos um caractere especial (!@#$...).");
+        }
+
         if (role === UserRole.PROFESSIONAL && specialties.length === 0) {
             throw new Error("Selecione pelo menos uma área de atuação.");
         }
@@ -266,10 +306,11 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                         <Phone className="absolute left-4 top-4 text-gray-400 group-focus-within:text-primary transition-colors" size={20} />
                                         <input 
                                             type="tel" 
-                                            placeholder="(11) 9..." 
+                                            placeholder="(11) 99999-9999" 
                                             className="w-full bg-white border-2 border-transparent focus:border-primary rounded-2xl py-3.5 pl-12 pr-2 font-bold text-textMain outline-none transition-all shadow-sm" 
                                             value={phone} 
-                                            onChange={e => setPhone(e.target.value)} 
+                                            onChange={e => setPhone(applyPhoneMask(e.target.value))} 
+                                            maxLength={15}
                                             required 
                                         />
                                     </div>
@@ -283,7 +324,8 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                             placeholder="00000-000" 
                                             className="w-full bg-white border-2 border-transparent focus:border-primary rounded-2xl py-3.5 pl-12 pr-2 font-bold text-textMain outline-none transition-all shadow-sm" 
                                             value={cep} 
-                                            onChange={e => setCep(e.target.value)} 
+                                            onChange={e => setCep(applyCepMask(e.target.value))} 
+                                            maxLength={9}
                                             required 
                                         />
                                     </div>
@@ -351,6 +393,9 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
                         </div>
+                        {viewState === 'register' && (
+                            <p className="text-[10px] text-textMuted ml-1">Mínimo 8 caracteres, 1 maiúscula, 1 número e 1 caractere especial.</p>
+                        )}
                     </div>
 
                     <button 

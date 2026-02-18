@@ -5,6 +5,7 @@ import { Backend } from './services/mockBackend';
 import { useToast } from './components/ToastContext';
 import ProposalCard from './components/ProposalCard';
 import CreateProposalModal from './components/CreateProposalModal';
+import ProposalDetailModal from './components/ProposalDetailModal';
 import ChatInterface from './components/ChatInterface';
 import AdminDashboard from './components/AdminDashboard';
 import ProfessionalDashboard from './components/ProfessionalDashboard';
@@ -25,7 +26,7 @@ import {
   Home, Search, User as UserIcon, 
   Plus, Coffee, LogOut, MapPin, 
   Star, LayoutGrid, ShieldCheck, Heart, Sparkles, MessageCircle, ArrowRight, Calendar, Trophy, Settings, X, Loader2, Bell, Map, List, HelpCircle, FileText, ChevronRight, Filter, ArrowUpRight, Briefcase, PieChart,
-  ChevronLeft, SlidersHorizontal, Hourglass
+  ChevronLeft, SlidersHorizontal, Hourglass, Radar
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -56,7 +57,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User>({ id: 0, name: '', email: '', role: UserRole.GUEST, avatarUrl: '' });
   const [view, setView] = useState('feed'); 
   const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [myProposals, setMyProposals] = useState<Proposal[]>([]); // Novo estado para pedidos do contratante
+  const [myProposals, setMyProposals] = useState<Proposal[]>([]); 
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [services, setServices] = useState<ServiceSubItem[]>([]);
   const [isModalOpen, setModalOpen] = useState(false);
@@ -76,14 +77,13 @@ const App: React.FC = () => {
   const [reviewProposalId, setReviewProposalId] = useState<number>(0);
   const [reviewTargetName, setReviewTargetName] = useState('');
   const [viewProfileUser, setViewProfileUser] = useState<User | null>(null);
+  const [viewProposal, setViewProposal] = useState<Proposal | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [directHireProfessional, setDirectHireProfessional] = useState<User | null>(null);
   const [browsingCategory, setBrowsingCategory] = useState<string | null>(null);
   const [searchViewMode, setSearchViewMode] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Estado para filtro de distância (Profissional)
   const [distanceRadius, setDistanceRadius] = useState<number | 'Infinity'>('Infinity');
 
   useEffect(() => {
@@ -100,7 +100,6 @@ const App: React.FC = () => {
             await loadSearchData(); 
         } catch (error) {
             console.warn("Using offline mode due to init failure:", error);
-            // Default to guest/login screen instead of crashing
             setUser({ id: 0, name: '', email: '', role: UserRole.GUEST, avatarUrl: '' });
         } finally {
             setIsAppLoading(false);
@@ -164,7 +163,6 @@ const App: React.FC = () => {
   const refreshData = async (pageNum: number = 1, shouldReplace: boolean = false) => {
       try {
           if (view === 'feed') {
-              // SE FOR PROFISSIONAL: Busca jobs na região
               if (user.role === UserRole.PROFESSIONAL) {
                   let allProposals = await Backend.getProposals(
                       undefined, 
@@ -186,7 +184,6 @@ const App: React.FC = () => {
                   if (shouldReplace) setProposals(allProposals);
                   else setProposals(prev => [...prev, ...allProposals.filter(p => !prev.find(x => x.id === p.id))]);
               } 
-              // SE FOR CONTRATANTE: Busca "Meus Pedidos"
               else if (user.role === UserRole.CONTRACTOR) {
                   const myProps = await Backend.getProposals(
                       undefined, 1, 5, undefined, undefined, undefined, user.id
@@ -232,9 +229,9 @@ const App: React.FC = () => {
   const handleAcceptProposal = async (proposalId: number) => {
       try {
           await Backend.acceptProposal(proposalId, user.id);
-          addToast("Job aceito!", "success");
-          refreshData(1, true); 
-          setView('chats');
+          // Não redirecionamos mais automaticamente para o chat, pois a animação do card diz "Adicionado à agenda"
+          refreshData(1, true);
+          // O usuário pode ir para a agenda ou feed.
       } catch (error: any) {
           addToast(error.message || "Erro ao aceitar.", "error");
       }
@@ -248,7 +245,7 @@ const App: React.FC = () => {
       };
       await Backend.createProposal(payload);
       addToast("Pedido publicado com sucesso!", "success");
-      refreshData(1, true); // Recarrega para mostrar o novo pedido na lista "Meus Pedidos"
+      refreshData(1, true); 
     } catch (error: any) {
       addToast(error.message || "Erro ao publicar pedido.", "error");
       throw error; 
@@ -291,6 +288,15 @@ const App: React.FC = () => {
       setDirectHireProfessional(null); 
       setModalOpen(true);
   };
+
+  const handleViewProposalFromCalendar = async (proposalId: number) => {
+      try {
+          const proposal = await Backend.getProposalById(proposalId);
+          setViewProposal(proposal);
+      } catch (e) {
+          addToast("Não foi possível carregar os detalhes.", "error");
+      }
+  };
   
   const handleViewProfile = (pro: User) => setViewProfileUser(pro);
   
@@ -309,29 +315,41 @@ const App: React.FC = () => {
   const isAdminView = user.role === UserRole.ADMIN && view === 'admin';
 
   return (
-    <div className="min-h-screen bg-background text-secondary">
-      <main className={isAdminView ? "h-screen overflow-hidden" : ""}>
+    <div className="min-h-screen bg-background text-secondary font-sans selection:bg-primary/20">
+      <main className={`${isAdminView ? "h-screen overflow-hidden" : "pb-28"}`}>
         {view === 'admin' && <AdminDashboard />}
         {view === 'feed' && renderFeed()}
         {view === 'search' && renderSearch()} 
         {view === 'dashboard' && <ProfessionalDashboard stats={MOCK_PRO_STATS} />} 
-        {view === 'calendar' && <CalendarInterface user={user} onOpenChat={() => setView('chats')} />}
+        {view === 'calendar' && <CalendarInterface user={user} onViewProposal={handleViewProposalFromCalendar} />}
         {view === 'gamification' && <GamificationHub user={user} onBack={() => setView('profile')} />} 
         {view === 'chats' && <ChatInterface user={user} chats={chats} onSendMessage={handleSendMessage} onRefresh={refreshChats} onComplete={handleCompleteJob} />}
         {view === 'profile' && renderProfile()} 
       </main>
 
       {!isAdminView && (
-          <div className="fixed bottom-6 left-6 right-6 h-[88px] glass rounded-[2.5rem] flex items-center justify-around px-2 z-[100] shadow-float">
-            <NavBtn active={view === 'feed'} onClick={() => setView('feed')} icon={<Home />} label="Home" />
-            <NavBtn active={view === (user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} onClick={() => setView(user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} icon={user.role === UserRole.CONTRACTOR ? <LayoutGrid /> : <PieChart />} label={user.role === UserRole.CONTRACTOR ? 'Busca' : 'Gestão'} />
-            <NavBtn active={view === 'calendar'} onClick={() => setView('calendar')} icon={<Calendar />} label="Agenda" />
-            <NavBtn active={view === 'chats'} onClick={() => setView('chats')} icon={<MessageCircle />} label="Chat" />
-            <NavBtn active={view === 'profile'} onClick={() => setView('profile')} icon={<UserIcon />} label="Perfil" />
+          <div className="fixed bottom-0 left-0 right-0 glass px-6 pb-6 pt-4 z-[100] border-t border-white/50">
+            <div className="flex items-center justify-around max-w-lg mx-auto">
+              <NavBtn active={view === 'feed'} onClick={() => setView('feed')} icon={<Home />} label="Home" />
+              <NavBtn active={view === (user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} onClick={() => setView(user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} icon={user.role === UserRole.CONTRACTOR ? <LayoutGrid /> : <PieChart />} label={user.role === UserRole.CONTRACTOR ? 'Busca' : 'Gestão'} />
+              
+              {/* Central Action Button */}
+              {user.role === UserRole.CONTRACTOR ? (
+                <button onClick={() => { setModalInitialCategory(null); setDirectHireProfessional(null); setModalOpen(true); }} className="relative -top-8 bg-primary hover:bg-primaryDark text-white w-14 h-14 rounded-full shadow-glow flex items-center justify-center transition-all hover:scale-110 active:scale-95">
+                   <Plus size={28} strokeWidth={2.5} />
+                </button>
+              ) : (
+                <NavBtn active={view === 'calendar'} onClick={() => setView('calendar')} icon={<Calendar />} label="Agenda" />
+              )}
+              
+              <NavBtn active={view === 'chats'} onClick={() => setView('chats')} icon={<MessageCircle />} label="Chat" notification={chats.some(c => c.unreadCount > 0)} />
+              <NavBtn active={view === 'profile'} onClick={() => setView('profile')} icon={<UserIcon />} label="Perfil" />
+            </div>
           </div>
       )}
 
       <CreateProposalModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSubmit={handleCreateProposal} initialCategory={modalInitialCategory} targetProfessional={directHireProfessional} />
+      <ProposalDetailModal isOpen={!!viewProposal} onClose={() => setViewProposal(null)} proposal={viewProposal} />
       <SecurityModal isOpen={isSecurityModalOpen} onClose={() => setIsSecurityModalOpen(false)} />
       <FavoritesModal isOpen={isFavoritesModalOpen} onClose={() => setIsFavoritesModalOpen(false)} favorites={favorites} onRemove={id => {}} onOpenSubscription={() => {}} isSubscriber={true} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />
@@ -346,24 +364,21 @@ const App: React.FC = () => {
       : services.slice(0, 8); 
 
     return (
-    <div className="max-w-xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
-        <header className="flex justify-between items-center mb-10">
+    <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+        <header className="flex justify-between items-center mb-8 pt-4">
             <div>
-                <p className="text-[11px] font-black uppercase text-primary tracking-widest leading-none mb-1">Linka Jobi,</p>
-                <h3 className="font-extrabold text-3xl text-secondary tracking-tight">Olá, {user.name.split(' ')[0]}!</h3>
+                <p className="text-xs font-black uppercase text-primary tracking-widest mb-1">Linka Jobi</p>
+                <h1 className="font-display font-black text-4xl text-secondary tracking-tighter leading-none">
+                    Olá, {user.name.split(' ')[0]}
+                </h1>
             </div>
-            <div className="flex items-center gap-4">
-                {user.role === UserRole.ADMIN && (
-                    <button onClick={() => setView('admin')} className="w-12 h-12 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
-                        <ShieldCheck size={20} />
-                    </button>
-                )}
-                <button onClick={() => setIsNotificationPanelOpen(true)} className="w-12 h-12 bg-white rounded-full border border-gray-100 flex items-center justify-center relative shadow-sm">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setIsNotificationPanelOpen(true)} className="w-12 h-12 bg-white rounded-full border border-gray-100 flex items-center justify-center relative shadow-sm hover:bg-gray-50 transition-colors">
                     <Bell size={20} className="text-secondaryMuted" />
-                    {notifications.filter(n => !n.read).length > 0 && <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-50 rounded-full"></div>}
+                    {notifications.filter(n => !n.read).length > 0 && <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-accent rounded-full border-2 border-white"></div>}
                 </button>
-                <div className="relative group cursor-pointer" onClick={() => setView('profile')}>
-                    <img src={user.avatarUrl} className="w-14 h-14 rounded-full border-4 border-white shadow-lg object-cover" />
+                <div className="relative cursor-pointer group" onClick={() => setView('profile')}>
+                    <img src={user.avatarUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover group-hover:scale-105 transition-transform" />
                 </div>
             </div>
         </header>
@@ -371,28 +386,38 @@ const App: React.FC = () => {
         <NotificationPanel isOpen={isNotificationPanelOpen} onClose={() => setIsNotificationPanelOpen(false)} notifications={notifications} onMarkRead={handleMarkNotificationRead} />
 
         {user.role === UserRole.CONTRACTOR ? (
-            <div className="relative mb-8 group" onClick={() => setView('search')}>
-                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-primary" size={24} />
-                <div className="w-full bg-white border-2 border-transparent rounded-[2rem] p-6 pl-16 font-bold text-sm text-secondaryMuted cursor-pointer shadow-card">
-                    O que você precisa hoje?
+            <div className="relative mb-10 group cursor-pointer" onClick={() => setView('search')}>
+                <div className="absolute inset-0 bg-primary/5 rounded-[2rem] transform rotate-1 group-hover:rotate-2 transition-transform"></div>
+                <div className="relative bg-white border border-gray-100 rounded-[2rem] p-5 flex items-center gap-5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.05)] group-hover:shadow-[0_15px_35px_-10px_rgba(124,58,237,0.15)] transition-all">
+                    <Search className="text-primary" size={28} strokeWidth={2.5} />
+                    <div className="flex-1">
+                        <span className="block font-black text-lg text-secondary leading-tight">Do que você precisa?</span>
+                        <span className="block text-xs font-medium text-secondaryMuted mt-0.5">Pedreiro, Eletricista, Faxina...</span>
+                    </div>
+                    <div className="w-10 h-10 bg-secondary text-white rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <ArrowRight size={18} />
+                    </div>
                 </div>
             </div>
         ) : (
-            <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-card mb-10 flex items-center justify-between cursor-pointer" onClick={() => setView('dashboard')}>
-                 <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><Briefcase size={24} /></div>
-                     <div><h3 className="font-bold text-secondary text-base">Meu Desempenho</h3><p className="text-xs text-secondaryMuted font-medium">Veja seus resultados</p></div>
+            <div className="bg-gradient-to-r from-primary to-primaryDark p-6 rounded-[1.5rem] shadow-glow mb-8 text-white relative overflow-hidden cursor-pointer" onClick={() => setView('dashboard')}>
+                 <div className="relative z-10 flex justify-between items-center">
+                     <div>
+                         <h3 className="font-display font-bold text-lg mb-1">Painel Profissional</h3>
+                         <p className="text-xs text-white/80 font-medium">Toque para ver seus ganhos</p>
+                     </div>
+                     <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center"><Briefcase size={20} /></div>
                  </div>
-                 <ChevronRight size={20} className="text-gray-400" />
+                 <div className="absolute -right-6 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
             </div>
         )}
 
         {user.role === UserRole.CONTRACTOR && (
             <div className="mb-10">
-                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                    {selectedCategoryId && <button onClick={() => setSelectedCategoryId(null)} className="bg-gray-200 text-secondaryMuted px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wide">Todos</button>}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    {selectedCategoryId && <button onClick={() => setSelectedCategoryId(null)} className="bg-secondary text-white px-5 py-3 rounded-2xl font-bold text-xs shrink-0 shadow-lg shadow-secondary/20">Todos</button>}
                     {categories.map(cat => (
-                        <button key={cat.id} onClick={() => setSelectedCategoryId(cat.id === selectedCategoryId ? null : cat.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-bold text-xs transition-all ${selectedCategoryId === cat.id ? 'bg-primary text-white' : 'bg-white text-secondaryMuted border border-gray-100'}`}>
+                        <button key={cat.id} onClick={() => setSelectedCategoryId(cat.id === selectedCategoryId ? null : cat.id)} className={`shrink-0 px-5 py-3 rounded-2xl font-bold text-xs transition-all ${selectedCategoryId === cat.id ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-white text-secondaryMuted border border-gray-100 hover:border-gray-200'}`}>
                             {cat.name}
                         </button>
                     ))}
@@ -402,66 +427,100 @@ const App: React.FC = () => {
 
         {user.role === UserRole.CONTRACTOR && (
             <>
-                {/* Meus Pedidos Recentes (FEEDBACK VISUAL IMPORTANTE) */}
                 {myProposals.length > 0 && (
-                    <div className="mb-12 animate-scale-in">
-                        <h3 className="text-xl font-black text-secondary mb-4 flex items-center gap-2"><Hourglass className="text-primary" size={20} /> Meus Pedidos em Aberto</h3>
+                    <div className="mb-10 animate-scale-in">
+                        <h3 className="text-base font-black text-secondary mb-5 flex items-center gap-2 tracking-tight">
+                            <Radar className="text-primary animate-pulse" size={20} /> Pedidos em Aberto
+                        </h3>
                         <div className="space-y-4">
                             {myProposals.map(p => (
-                                <div key={p.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between">
-                                    <div>
-                                        <h4 className="font-extrabold text-secondary text-lg">{p.title}</h4>
-                                        <p className="text-xs text-secondaryMuted font-bold uppercase tracking-wide">{p.budgetRange}</p>
+                                <div key={p.id} onClick={() => setViewProposal(p)} className="relative bg-white p-5 rounded-[1.5rem] border border-gray-100 shadow-card hover:shadow-float transition-all group overflow-hidden cursor-pointer active:scale-[0.98]">
+                                    {/* Linha de Status Lateral */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+                                    
+                                    <div className="flex items-start justify-between pl-3">
+                                        <div className="flex items-start gap-4">
+                                            {/* Ícone da Categoria */}
+                                            <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center text-xl shrink-0 border border-primary/10 text-primary">
+                                                <Briefcase size={20} />
+                                            </div>
+                                            
+                                            <div>
+                                                <h4 className="font-extrabold text-secondary text-base leading-tight mb-1">{p.title}</h4>
+                                                <p className="text-[11px] text-secondaryMuted font-medium line-clamp-1 mb-2">"{p.description}"</p>
+                                                
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100">
+                                                        {p.budgetRange}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="relative flex h-2 w-2">
+                                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Buscando...</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white transition-colors">
+                                            <ChevronRight size={16} />
+                                        </button>
                                     </div>
-                                    <span className="bg-yellow-50 text-yellow-700 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-yellow-100">
-                                        Aguardando
-                                    </span>
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
-
-                <button onClick={() => { setModalInitialCategory(null); setDirectHireProfessional(null); setModalOpen(true); }} className="w-full bg-primary p-1 rounded-[3rem] mb-12 shadow-glow hover:shadow-xl transition-all">
-                    <div className="bg-primary p-10 rounded-[2.8rem] flex items-center justify-between relative overflow-hidden">
-                        <div className="relative z-10 text-left">
-                            <h4 className="text-3xl font-extrabold text-white mb-2">Pedir Novo <br/>Serviço</h4>
-                            <p className="text-white/80 font-bold text-sm">Rápido e no bairro.</p>
-                        </div>
-                        <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center shadow-xl text-primary"><Plus size={40} strokeWidth={3} /></div>
-                    </div>
-                </button>
                 
-                 <div className="mb-12">
-                    <h3 className="text-xl font-black text-secondary mb-6 flex items-center gap-2"><Star className="text-warning fill-warning" size={20} /> Vizinhos mais bem avaliados</h3>
-                    <div className="flex gap-4 overflow-x-auto no-scrollbar pb-8 px-2 -mx-2">
+                 <div className="mb-10">
+                    <h3 className="text-base font-black text-secondary mb-5 flex items-center gap-2 tracking-tight"><Star className="text-yellow-400 fill-yellow-400" size={20} /> Profissionais Recomendados</h3>
+                    <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
                         {topPros.map(pro => (
-                            <button key={pro.id} onClick={() => handleViewProfile(pro)} className="relative min-w-[150px] w-[150px] h-[200px] rounded-[2.5rem] overflow-hidden shadow-card group shrink-0">
-                                <img src={pro.avatarUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={pro.name} />
+                            <button key={pro.id} onClick={() => handleViewProfile(pro)} className="relative min-w-[150px] w-[150px] h-[200px] rounded-[1.5rem] overflow-hidden shadow-card group shrink-0">
+                                <img src={pro.avatarUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={pro.name} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
                                 
-                                <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1 border border-white/10 shadow-sm">
+                                <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-md border border-white/30 px-2 py-1 rounded-lg flex items-center gap-1">
                                     <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                                    <span className="text-[10px] font-bold text-white">{pro.rating}</span>
+                                    <span className="text-[10px] font-black text-white">{pro.rating}</span>
                                 </div>
                                 
-                                <div className="absolute bottom-5 left-5 text-left pr-4">
-                                    <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mb-1 truncate">{pro.specialty}</p>
-                                    <h4 className="text-white font-extrabold text-lg leading-tight truncate">{pro.name.split(' ')[0]}</h4>
+                                <div className="absolute bottom-4 left-4 text-left">
+                                    <p className="text-white/70 text-[9px] font-black uppercase tracking-widest mb-1 truncate w-28">{pro.specialty}</p>
+                                    <h4 className="text-white font-black text-base leading-tight truncate w-28">{pro.name.split(' ')[0]}</h4>
                                 </div>
                             </button>
                         ))}
                     </div>
                 </div>
 
-                 <div className="mb-12">
-                    <h3 className="text-xl font-black text-secondary mb-6 flex items-center gap-2"><Sparkles className="text-primary" size={20} /> Serviços em Destaque</h3>
-                    <div className="flex overflow-x-auto gap-4 no-scrollbar pb-8 px-2 -mx-2">
+                 <div className="mb-8">
+                    <h3 className="text-base font-black text-secondary mb-5 flex items-center gap-2 tracking-tight"><Sparkles className="text-primary" size={20} /> Categorias Populares</h3>
+                    <div className="grid grid-cols-2 gap-4">
                         {displayServices.map(serv => (
-                            <button key={serv.id} onClick={() => handleStartRequest(serv.name)} className="relative min-w-[150px] w-[150px] h-[200px] rounded-[2.5rem] overflow-hidden shadow-card group shrink-0">
-                                <img src={serv.imageUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={serv.name} />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                                <div className="absolute bottom-5 left-5 text-left"><h4 className="text-white font-extrabold text-xl leading-tight">{serv.name}</h4><p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mt-2">Pedir agora</p></div>
+                            <button key={serv.id} onClick={() => handleStartRequest(serv.name)} className="relative h-56 rounded-[2rem] overflow-hidden group shadow-lg cursor-pointer transform transition-transform duration-300 active:scale-95">
+                                {/* Image Background */}
+                                <img src={serv.imageUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={serv.name} />
+                                
+                                {/* Dark Gradient Overlay for Text Readability */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-90 transition-opacity group-hover:opacity-100" />
+                                
+                                {/* Content */}
+                                <div className="absolute bottom-0 left-0 right-0 p-5 flex flex-col justify-end h-full">
+                                    <div className="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+                                        <span className="block text-white/70 text-[9px] font-black uppercase tracking-widest mb-1">Serviço Premium</span>
+                                        <div className="flex justify-between items-end">
+                                            <span className="font-display font-black text-white text-xl leading-none w-3/4 text-left">{serv.name}</span>
+                                            
+                                            {/* Action Button */}
+                                            <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white group-hover:bg-white group-hover:text-primary transition-all duration-300 shadow-lg">
+                                                <ArrowUpRight size={20} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </button>
                         ))}
                     </div>
@@ -471,46 +530,46 @@ const App: React.FC = () => {
 
         {user.role === UserRole.PROFESSIONAL && (
             <div className="space-y-6">
-                <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 className="font-black text-secondary text-lg mb-1">Jobs para Você</h3>
-                            <p className="text-sm text-secondaryMuted font-medium">Filtro: <strong className="text-primary">{user.specialty || 'Todas as áreas'}</strong></p>
-                        </div>
-                        <div className="bg-white rounded-full p-2 shadow-sm border border-gray-100 text-primary">
-                            <SlidersHorizontal size={20} />
+                <div className="bg-white p-5 rounded-[1.5rem] border border-gray-100 shadow-sm sticky top-0 z-10">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-secondary text-sm">Filtrar Oportunidades</h3>
+                        <div className="bg-gray-50 rounded-full p-2 text-textMuted hover:text-primary cursor-pointer transition-colors">
+                            <SlidersHorizontal size={16} />
                         </div>
                     </div>
                     
-                    {/* Filtro de Raio */}
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
                         {[5, 10, 30, 'Infinity'].map((val) => (
                             <button
                                 key={val}
                                 onClick={() => setDistanceRadius(val as number | 'Infinity')}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                                     distanceRadius === val 
-                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' 
-                                    : 'bg-white text-textMuted border-gray-100 hover:border-gray-200'
+                                    ? 'bg-primary text-white border-primary' 
+                                    : 'bg-white text-secondaryMuted border-gray-100 hover:border-gray-200'
                                 }`}
                             >
-                                {val === 'Infinity' ? 'Tudo' : `${val} km`}
+                                {val === 'Infinity' ? 'Sem limite' : `Até ${val}km`}
                             </button>
                         ))}
                     </div>
                 </div>
 
                 {proposals.length === 0 ? (
-                    <div className="text-center py-12 opacity-50">
-                        <MapPin size={40} className="mx-auto text-gray-300 mb-2" />
-                        <p className="font-bold text-textMuted">Nenhum job encontrado nesta região.</p>
-                        <p className="text-xs">Tente aumentar o raio de busca.</p>
+                    <div className="text-center py-12 opacity-60">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
+                            <MapPin size={24} />
+                        </div>
+                        <p className="font-bold text-secondaryMuted">Nenhum job encontrado.</p>
+                        <p className="text-xs text-gray-400">Tente aumentar o raio de busca.</p>
                     </div>
                 ) : (
-                    proposals.map(p => <ProposalCard key={p.id} proposal={p} userRole={user.role} onAccept={() => handleAcceptProposal(p.id)} />)
+                    <div className="space-y-4">
+                        {proposals.map(p => <ProposalCard key={p.id} proposal={p} userRole={user.role} onAccept={() => handleAcceptProposal(p.id)} />)}
+                    </div>
                 )}
                 
-                {hasMore && proposals.length > 0 && <button onClick={handleLoadMore} className="w-full py-4 bg-white border border-gray-100 text-secondaryMuted font-bold rounded-[2rem] shadow-sm">{isLoadMore ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Ver mais jobs'}</button>}
+                {hasMore && proposals.length > 0 && <button onClick={handleLoadMore} className="w-full py-3 bg-white border border-gray-100 text-secondaryMuted text-xs font-bold rounded-xl shadow-sm hover:bg-gray-50">{isLoadMore ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Carregar mais'}</button>}
             </div>
         )}
     </div>
@@ -519,38 +578,46 @@ const App: React.FC = () => {
 
   function renderSearch() { 
       return (
-        <div className="max-w-xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
-            <h2 className="text-3xl font-extrabold text-secondary mb-6">Explorar</h2>
+        <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+            <h2 className="font-display text-2xl font-extrabold text-secondary mb-6">Explorar</h2>
             <div className="relative mb-8">
-                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-primary" size={24} />
-                <input className="w-full h-16 bg-white border-2 border-transparent rounded-[2rem] pl-16 pr-6 font-bold text-lg outline-none focus:border-primary shadow-card transition-all placeholder:text-gray-300" placeholder="Busque por serviço (ex: Pintor)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input className="w-full bg-white border border-gray-100 rounded-2xl py-4 pl-12 pr-4 font-bold text-sm outline-none focus:border-primary shadow-sm transition-all" placeholder="O que você procura?" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
 
             {!searchQuery && !browsingCategory && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                     {categories.map(cat => (
-                        <button key={cat.id} onClick={() => setBrowsingCategory(cat.id)} className="relative h-44 rounded-[2.5rem] overflow-hidden shadow-card group active:scale-95">
-                            <img src={cat.imageUrl} className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-110" alt={cat.name} />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                            <span className="absolute bottom-5 left-5 text-white font-extrabold text-xl leading-tight">{cat.name}</span>
+                        <button key={cat.id} onClick={() => setBrowsingCategory(cat.id)} className="relative h-32 rounded-2xl overflow-hidden shadow-sm group active:scale-95 transition-transform">
+                            <img src={cat.imageUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={cat.name} />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                            <span className="absolute bottom-3 left-3 text-white font-bold text-sm leading-tight">{cat.name}</span>
                         </button>
                     ))}
-                    <div onClick={() => setSearchViewMode('map')} className="col-span-2 bg-primary p-8 rounded-[2.5rem] text-white flex justify-between items-center cursor-pointer shadow-glow">
-                        <div><h3 className="text-2xl font-black mb-1">Ver no Mapa</h3><p className="text-sm opacity-80">Profissionais perto de você</p></div>
-                        <Map size={40} />
+                    <div onClick={() => setSearchViewMode('map')} className="col-span-2 bg-secondary p-6 rounded-2xl text-white flex justify-between items-center cursor-pointer shadow-lg mt-2">
+                        <div>
+                            <h3 className="font-bold text-lg mb-1">Mapa de Profissionais</h3>
+                            <p className="text-xs text-white/70">Encontre ajuda perto de você</p>
+                        </div>
+                        <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center"><Map size={20} /></div>
                     </div>
                 </div>
             )}
 
             {browsingCategory && !searchQuery && (
-                <div className="space-y-6">
-                    <button onClick={() => setBrowsingCategory(null)} className="flex items-center gap-2 text-secondaryMuted font-bold text-sm mb-4"><ChevronLeft size={18} /> Voltar</button>
-                    <h3 className="text-3xl font-black text-secondary">{categories.find(c => c.id === browsingCategory)?.name}</h3>
-                    <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-4">
+                    <button onClick={() => setBrowsingCategory(null)} className="flex items-center gap-2 text-secondaryMuted font-bold text-xs mb-4 hover:text-primary transition-colors"><ChevronLeft size={16} /> Voltar para categorias</button>
+                    <h3 className="font-display text-2xl font-black text-secondary">{categories.find(c => c.id === browsingCategory)?.name}</h3>
+                    <div className="grid grid-cols-1 gap-3">
                         {services.filter(s => s.categoryId === browsingCategory).map(s => (
-                            <button key={s.id} onClick={() => handleStartRequest(s.name)} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm hover:border-primary transition-all text-left flex justify-between items-center group">
-                                <span className="font-extrabold text-secondary text-xl">{s.name}</span>
-                                <ArrowUpRight className="text-gray-300 group-hover:text-primary transition-colors" />
+                            <button key={s.id} onClick={() => handleStartRequest(s.name)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-primary/30 transition-all text-left flex justify-between items-center group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-gray-50 rounded-xl overflow-hidden"><img src={s.imageUrl} className="w-full h-full object-cover" /></div>
+                                    <span className="font-bold text-secondary text-sm">{s.name}</span>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white transition-colors">
+                                    <ArrowRight size={16} />
+                                </div>
                             </button>
                         ))}
                     </div>
@@ -559,9 +626,9 @@ const App: React.FC = () => {
 
             {searchViewMode === 'map' && (
                 <div className="fixed inset-0 z-[150] bg-white flex flex-col animate-scale-in">
-                    <div className="p-6 flex justify-between items-center bg-white z-10">
-                        <h2 className="text-2xl font-black text-secondary">Profissionais</h2>
-                        <button onClick={() => setSearchViewMode('list')} className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center"><X size={24} /></button>
+                    <div className="p-4 flex justify-between items-center bg-white z-10 border-b border-gray-100">
+                        <h2 className="font-bold text-lg text-secondary">Mapa</h2>
+                        <button onClick={() => setSearchViewMode('list')} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-gray-100"><X size={20} /></button>
                     </div>
                     <div className="flex-1"><MapInterface professionals={topPros} onSelectProfessional={handleViewProfile} /></div>
                 </div>
@@ -572,27 +639,26 @@ const App: React.FC = () => {
   
   function renderProfile() { 
       return (
-        <div className="max-w-xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
-            <div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-extrabold text-secondary">Meu Perfil</h2><button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm"><Settings size={22} /></button></div>
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-card border border-white mb-8 text-center group">
+        <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+            <div className="flex justify-between items-center mb-8"><h2 className="font-display text-2xl font-extrabold text-secondary">Meu Perfil</h2><button onClick={() => setIsSettingsOpen(true)} className="w-10 h-10 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors"><Settings size={18} /></button></div>
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 mb-6 text-center">
                 <div className="flex flex-col items-center">
-                    <div className="w-28 h-28 rounded-full p-1.5 border-2 border-primary/20 mb-4"><img src={user.avatarUrl} className="w-full h-full rounded-full object-cover shadow-lg" alt="Profile" /></div>
-                    <h3 className="text-2xl font-black text-secondary mb-1">{user.name}</h3>
-                    <p className="text-sm font-bold text-secondaryMuted uppercase tracking-wide mb-6 px-4 bg-gray-50 py-1 rounded-full">{user.role === UserRole.PROFESSIONAL ? user.specialty : user.role === UserRole.ADMIN ? 'Administrador' : 'Cliente Linka'}</p>
-                    <div className="flex items-center gap-2 bg-gray-50 px-5 py-2.5 rounded-full border border-gray-100"><MapPin size={16} className="text-primary" /><span className="text-xs font-bold text-secondary">{user.location || 'Localização não definida'}</span></div>
+                    <div className="w-24 h-24 rounded-full p-1 border-2 border-primary/20 mb-3"><img src={user.avatarUrl} className="w-full h-full rounded-full object-cover shadow-sm" alt="Profile" /></div>
+                    <h3 className="text-xl font-bold text-secondary mb-1">{user.name}</h3>
+                    <p className="text-xs font-bold text-secondaryMuted uppercase tracking-wide bg-gray-50 px-3 py-1 rounded-full mb-4">{user.role === UserRole.PROFESSIONAL ? user.specialty : user.role === UserRole.ADMIN ? 'Administrador' : 'Cliente Linka'}</p>
+                    <div className="flex items-center gap-2 text-xs text-secondaryMuted font-medium"><MapPin size={14} className="text-primary" />{user.location || 'Localização não definida'}</div>
                 </div>
             </div>
-            <div className="bg-white rounded-[2.5rem] border border-white shadow-card overflow-hidden">
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
                 {user.role === UserRole.ADMIN && (
-                    <MenuItem icon={<ShieldCheck size={20}/>} label="Painel de Controle Admin" onClick={() => setView('admin')} color="text-gray-900" bg="bg-gray-100" />
+                    <MenuItem icon={<ShieldCheck size={18}/>} label="Painel Admin" onClick={() => setView('admin')} color="text-gray-900" bg="bg-gray-100" />
                 )}
-                <MenuItem icon={<Trophy size={20}/>} label="Linka Club (Nível)" onClick={() => setView('gamification')} color="text-yellow-600" bg="bg-yellow-50" />
-                <MenuItem icon={<Heart size={20}/>} label="Favoritos" onClick={() => setIsFavoritesModalOpen(true)} color="text-red-500" bg="bg-red-50" />
-                <MenuItem icon={<ShieldCheck size={20}/>} label="Segurança" onClick={() => setIsSecurityModalOpen(true)} color="text-blue-500" bg="bg-blue-50" />
-                <MenuItem icon={<HelpCircle size={20}/>} label="Ajuda e Suporte" onClick={() => addToast("Suporte em breve!", "info")} color="text-purple-500" bg="bg-purple-50" />
-                <MenuItem icon={<FileText size={20}/>} label="Termos de Uso" onClick={() => {}} color="text-secondaryMuted" bg="bg-gray-50" />
-                <button onClick={handleLogout} className="w-full flex items-center gap-4 p-6 hover:bg-red-50 transition-colors border-t border-gray-50 group">
-                    <div className="w-10 h-10 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors"><LogOut size={20} /></div>
+                <MenuItem icon={<Trophy size={18}/>} label="Linka Club" onClick={() => setView('gamification')} color="text-yellow-600" bg="bg-yellow-50" />
+                <MenuItem icon={<Heart size={18}/>} label="Favoritos" onClick={() => setIsFavoritesModalOpen(true)} color="text-accent" bg="bg-red-50" />
+                <MenuItem icon={<ShieldCheck size={18}/>} label="Dicas de Segurança" onClick={() => setIsSecurityModalOpen(true)} color="text-blue-500" bg="bg-blue-50" />
+                <MenuItem icon={<HelpCircle size={18}/>} label="Ajuda e Suporte" onClick={() => addToast("Suporte em breve!", "info")} color="text-purple-500" bg="bg-purple-50" />
+                <button onClick={handleLogout} className="w-full flex items-center gap-4 p-5 hover:bg-red-50 transition-colors border-t border-gray-50 group">
+                    <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors"><LogOut size={18} /></div>
                     <span className="font-bold text-sm text-secondary group-hover:text-red-500 transition-colors">Sair da Conta</span>
                 </button>
             </div>
@@ -603,15 +669,18 @@ const App: React.FC = () => {
 
 const MenuItem = ({ icon, label, onClick, color, bg }: any) => (
     <button onClick={onClick} className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 group active:bg-gray-100">
-        <div className="flex items-center gap-4"><div className={`w-12 h-12 rounded-2xl ${bg} ${color} flex items-center justify-center transition-transform group-hover:scale-110`}>{icon}</div><span className="font-bold text-sm text-secondary">{label}</span></div>
-        <ChevronRight size={18} className="text-gray-300 group-hover:text-primary transition-colors" />
+        <div className="flex items-center gap-4"><div className={`w-10 h-10 rounded-xl ${bg} ${color} flex items-center justify-center transition-transform group-hover:scale-105`}>{icon}</div><span className="font-bold text-sm text-secondary">{label}</span></div>
+        <ChevronRight size={16} className="text-gray-300 group-hover:text-primary transition-colors" />
     </button>
 );
 
-const NavBtn = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center w-full h-full transition-all group ${active ? '' : 'opacity-60 hover:opacity-100'}`}>
-    <div className={`p-3 rounded-2xl transition-all duration-300 ${active ? 'bg-primary text-white shadow-glow -translate-y-4 scale-110' : 'text-secondaryMuted group-hover:text-primary group-hover:bg-primary/5'}`}>{React.cloneElement(icon, { size: 24, strokeWidth: active ? 3 : 2.5 })}</div>
-    <span className={`text-[10px] font-black uppercase mt-1 transition-all duration-300 ${active ? 'text-primary opacity-100 -translate-y-2' : 'text-secondaryMuted opacity-0 h-0 overflow-hidden'}`}>{label}</span>
+const NavBtn = ({ active, onClick, icon, label, notification }: any) => (
+  <button onClick={onClick} className="flex flex-col items-center justify-center w-16 h-full transition-all group relative">
+    <div className={`p-2.5 rounded-2xl transition-all duration-300 ${active ? 'bg-primary text-white shadow-glow -translate-y-2' : 'text-secondaryMuted hover:text-primary hover:bg-primary/5'}`}>
+        {React.cloneElement(icon, { size: 22, strokeWidth: active ? 2.5 : 2 })}
+        {notification && <div className="absolute top-2 right-4 w-2 h-2 bg-accent rounded-full border border-white"></div>}
+    </div>
+    <span className={`text-[10px] font-bold mt-1 transition-all duration-300 ${active ? 'text-primary opacity-100' : 'text-secondaryMuted opacity-0 h-0 overflow-hidden'}`}>{label}</span>
   </button>
 );
 

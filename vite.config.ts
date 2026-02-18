@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -10,9 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     // Define variáveis globais para substituir no código cliente
     define: {
-      // Mapeia a variável do .env (VITE_GOOGLE_API_KEY) para process.env.API_KEY
-      // isso satisfaz a regra estrita do SDK do Google GenAI
-      'process.env.API_KEY': JSON.stringify(env.VITE_GOOGLE_API_KEY),
+      // API Key removida por segurança. O Frontend não deve ter acesso a ela.
     },
     server: {
       proxy: {

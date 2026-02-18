@@ -1,4 +1,3 @@
-
 import { User, Proposal, UserRole, Notification, ServiceCategory, ServiceSubItem, Appointment, AdminStats, ProposalStatus, PortfolioItem, Review } from '../types';
 import { 
     DEFAULT_CATEGORIES, 
@@ -14,7 +13,7 @@ import {
 
 const BASE_URL = '/api'; 
 
-const mockDelay = (ms = 600) => new Promise(resolve => setTimeout(resolve, ms));
+const mockDelay = (ms = 400) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getHeaders = (isMultipart = false) => {
     const token = localStorage.getItem('token');
@@ -29,17 +28,15 @@ const getHeaders = (isMultipart = false) => {
 
 // --- Helper de Distância para Mock ---
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  var R = 6371; // Radius of the earth in km
+  var R = 6371; 
   var dLat = deg2rad(lat2-lat1);  
   var dLon = deg2rad(lon2-lon1); 
   var a = 
     Math.sin(dLat/2) * Math.sin(dLat/2) +
     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-    ; 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
   var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-  var d = R * c; // Distance in km
-  return d;
+  return R * c;
 }
 
 function deg2rad(deg: number) {
@@ -48,32 +45,23 @@ function deg2rad(deg: number) {
 
 async function tryApiOrMock<T>(
     apiCall: () => Promise<T>, 
-    mockFallback: () => T | Promise<T>
+    mockFallback: () => T | Promise<T>,
+    endpointName: string = "API"
 ): Promise<T> {
     try {
+        // Aumentado para 10s para suportar Cold Start do Supabase
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout")), 5000) 
+            setTimeout(() => reject(new Error("Timeout")), 10000) 
         );
+        
         const response = await Promise.race([apiCall(), timeoutPromise]);
         return response as T;
     } catch (error: any) {
         const msg = error.message || error.toString();
-        // Robust error checking to ensure fallback happens on any connectivity/404 issue
-        const isNetworkError = msg === "Timeout" || 
-                               msg.includes("Failed to fetch") || 
-                               msg.includes("NetworkError") ||
-                               msg.includes("network") ||
-                               msg.includes("No pros found") ||
-                               msg.includes("File not found") || 
-                               msg.includes("Not Found") || 
-                               msg.includes("404") ||
-                               msg.includes("Unexpected token"); 
-
-        if (!isNetworkError) {
-            throw error;
+        // Apenas loga se não for timeout, para debug
+        if (msg !== "Timeout" && !msg.includes("Failed to fetch")) {
+             console.warn(`⚠️ [API FALHOU] ${endpointName}: Usando dados locais. Motivo: ${msg}`);
         }
-
-        console.warn("Backend offline, 404 ou vazio. Usando Mock Data.", error);
         await mockDelay(); 
         return await mockFallback();
     }
@@ -94,20 +82,18 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
         
         if (response.status === 401) { 
             localStorage.removeItem('token'); 
-            throw new Error("Sessão expirada. Faça login novamente."); 
+            throw new Error("Sessão expirada."); 
         }
         
         const contentType = response.headers.get("content-type");
-        let data = null;
+        if (contentType && contentType.includes("text/html")) throw new Error("API not ready");
 
+        let data = null;
         if (contentType?.includes("application/json")) {
             data = await response.json();
         }
 
-        if (!response.ok) {
-            const errorMessage = data?.error || data?.message || response.statusText || 'Ocorreu um erro no servidor.';
-            throw new Error(errorMessage);
-        }
+        if (!response.ok) throw new Error(data?.error || 'Erro no servidor');
 
         return data;
     } catch (error: any) {
@@ -115,8 +101,7 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     }
 };
 
-// --- VARIÁVEIS DE ESTADO MOCKADO (Memória Volátil) ---
-// Isso permite que o dinheiro "mova" e as notas "atualizem" durante a sessão
+// --- ESTADO MOCKADO (Memória Volátil) ---
 let MOCK_WALLET_CONTRACTOR = 2500.00;
 let MOCK_WALLET_PROFESSIONAL = 150.00;
 let MOCK_TRANSACTIONS_MEMORY: any[] = [];
@@ -124,7 +109,7 @@ let MOCK_TRANSACTIONS_MEMORY: any[] = [];
 export const Backend = {
     checkHealth: async () => {
         try {
-            await fetch('/api/admin/stats', { method: 'GET', signal: AbortSignal.timeout(2000) });
+            await fetch('/api/health', { method: 'GET', signal: AbortSignal.timeout(2000) });
             return true; 
         } catch {
             return false;
@@ -136,6 +121,7 @@ export const Backend = {
         return tryApiOrMock(
             async () => {
                 const data = await apiFetch('/api/me');
+                if (!data || !data.user) throw new Error("Invalid user data");
                 return { user: data.user };
             },
             () => {
@@ -143,7 +129,8 @@ export const Backend = {
                 if (savedEmail === 'admin@linka.com') return { user: MOCK_ADMIN };
                 if (savedEmail === 'joao@linka.com') return { user: MOCK_PROFESSIONAL };
                 return { user: MOCK_CONTRACTOR }; 
-            }
+            },
+            "Init Session"
         );
     },
 
@@ -156,12 +143,11 @@ export const Backend = {
                 else if (email.includes('joao')) user = MOCK_PROFESSIONAL;
                 else user = MOCK_CONTRACTOR;
                 
-                if (password && password !== '123456') {}
-
                 localStorage.setItem('token', 'mock_token_123');
                 localStorage.setItem('mock_user_email', user.email);
                 return { user, token: 'mock_token_123' };
-            }
+            },
+            "Login"
         );
     },
 
@@ -173,14 +159,16 @@ export const Backend = {
                 localStorage.setItem('token', 'mock_token_new');
                 localStorage.setItem('mock_user_email', newUser.email);
                 return { user: newUser, token: 'mock_token_new' };
-            }
+            },
+            "Register"
         );
     },
 
     updateUser: async (u: User) => {
         return tryApiOrMock(
             async () => await apiFetch(`/api/users/${u.id}`, { method: 'PUT', body: JSON.stringify(u) }),
-            () => u 
+            () => u,
+            "Update User"
         );
     },
 
@@ -195,14 +183,16 @@ export const Backend = {
                 });
                 return res.url;
             },
-            () => URL.createObjectURL(file)
+            () => URL.createObjectURL(file),
+            "Upload Image"
         );
     },
 
     forgotPassword: async (email: string) => {
         return tryApiOrMock(
             async () => await apiFetch('/api/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
-            () => ({ success: true })
+            () => ({ success: true }),
+            "Forgot Password"
         );
     },
 
@@ -210,17 +200,16 @@ export const Backend = {
         const res = await apiFetch('/api/categories');
         if (!res) throw new Error("API call returned null");
         return res;
-    }, () => DEFAULT_CATEGORIES),
+    }, () => DEFAULT_CATEGORIES, "Get Categories"),
     
     getServices: async () => tryApiOrMock(async () => {
         const res = await apiFetch('/api/services');
         if (!res) throw new Error("API call returned null");
         return res;
-    }, () => DEFAULT_SERVICES),
+    }, () => DEFAULT_SERVICES, "Get Services"),
 
-    // --- PROPOSTAS (UPDATED FILTER) ---
     getProposals: async (area?: string, page: number = 1, limit: number = 10, lat?: number, lng?: number, radius?: number, contractorId?: number) => {
-        const qArea = area ? `&area=${area}` : '';
+        const qArea = area ? `&area=${encodeURIComponent(area)}` : '';
         const qLat = lat ? `&lat=${lat}` : '';
         const qLng = lng ? `&lng=${lng}` : '';
         const qRad = radius ? `&radius=${radius}` : '';
@@ -230,18 +219,8 @@ export const Backend = {
             async () => await apiFetch(`/api/proposals?page=${page}&limit=${limit}${qArea}${qLat}${qLng}${qRad}${qCid}`) || [],
             () => {
                 let props = [...MOCK_PROPOSALS];
-                
-                // Filtro por Contratante (Meus Pedidos)
-                if (contractorId) {
-                    props = props.filter(p => p.contractorId === contractorId);
-                }
-
-                // Filtro por Área
-                if (area) {
-                    props = props.filter(p => p.areaTag === area);
-                }
-
-                // Filtro Geo
+                if (contractorId) props = props.filter(p => p.contractorId === contractorId);
+                if (area) props = props.filter(p => p.areaTag === area);
                 if (lat && lng && radius && radius !== Infinity && !contractorId) {
                     props = props.filter(p => {
                         const mockPropLat = -23.5505 + (p.id % 2 === 0 ? 0.01 : 0.5); 
@@ -250,10 +229,21 @@ export const Backend = {
                         return dist <= radius;
                     });
                 }
-                
-                // Ordenação: Recentes primeiro
                 return props.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            }
+            },
+            "Get Proposals"
+        );
+    },
+
+    getProposalById: async (id: number) => {
+        return tryApiOrMock(
+            async () => await apiFetch(`/api/proposals/${id}`),
+            () => {
+                const prop = MOCK_PROPOSALS.find(p => p.id === id);
+                if (!prop) throw new Error("Not Found");
+                return prop;
+            },
+            "Get Proposal By ID"
         );
     },
 
@@ -262,19 +252,19 @@ export const Backend = {
             async () => await apiFetch('/api/proposals', { method: 'POST', body: JSON.stringify(p) }),
             () => {
                 const newProposal: Proposal = { 
-                    ...MOCK_PROPOSALS[0], // Base mock
+                    ...MOCK_PROPOSALS[0], 
                     ...p, 
                     id: Date.now(), 
                     status: ProposalStatus.OPEN, 
                     createdAt: new Date().toISOString(),
-                    // Garante que o contratante é o mock atual
                     contractorId: p.contractorId || MOCK_CONTRACTOR.id,
                     contractorName: p.contractorName || MOCK_CONTRACTOR.name,
                     contractorAvatar: MOCK_CONTRACTOR.avatarUrl
                 } as Proposal;
                 MOCK_PROPOSALS.unshift(newProposal);
                 return newProposal;
-            }
+            },
+            "Create Proposal"
         );
     },
 
@@ -286,8 +276,6 @@ export const Backend = {
                 if (prop) {
                     prop.status = ProposalStatus.NEGOTIATING;
                     prop.professionalId = userId;
-                    
-                    // Adiciona chat
                     MOCK_CHATS.push({
                         id: Date.now(),
                         proposalId: prop.id,
@@ -307,7 +295,8 @@ export const Backend = {
                     });
                 }
                 return { success: true };
-            }
+            },
+            "Accept Proposal"
         );
     },
 
@@ -318,17 +307,12 @@ export const Backend = {
                 const prop = MOCK_PROPOSALS.find(p => p.id === id);
                 if (prop) {
                     prop.status = ProposalStatus.COMPLETED;
-                    
-                    // Atualiza status no chat também
                     const chat = MOCK_CHATS.find(c => c.proposalId === id);
                     if (chat) chat.proposalStatus = ProposalStatus.COMPLETED;
 
-                    // SIMULA MOVIMENTAÇÃO FINANCEIRA
-                    // Extrai valor numérico (simulado, pega o primeiro numero do range ou 100)
                     const valueMatch = prop.budgetRange.match(/\d+/);
                     const value = valueMatch ? parseInt(valueMatch[0]) : 100;
 
-                    // Debita do Contratante
                     MOCK_WALLET_CONTRACTOR -= value;
                     MOCK_TRANSACTIONS_MEMORY.push({
                         id: `tx_${Date.now()}_c`,
@@ -340,9 +324,8 @@ export const Backend = {
                         userId: prop.contractorId
                     });
 
-                    // Credita ao Profissional
                     if (prop.professionalId) {
-                        MOCK_WALLET_PROFESSIONAL += (value * 0.9); // Taxa 10%
+                        MOCK_WALLET_PROFESSIONAL += (value * 0.9);
                         MOCK_TRANSACTIONS_MEMORY.push({
                             id: `tx_${Date.now()}_p`,
                             type: 'INCOME',
@@ -355,7 +338,8 @@ export const Backend = {
                     }
                 }
                 return { success: true };
-            }
+            },
+            "Complete Proposal"
         );
     },
 
@@ -363,7 +347,6 @@ export const Backend = {
         return tryApiOrMock(
             async () => await apiFetch('/api/reviews', { method: 'POST', body: JSON.stringify({ proposalId, targetId, rating, comment }) }),
             () => {
-                // Adiciona Review Mockada
                 MOCK_PROFILE_REVIEWS.unshift({
                     id: Date.now(),
                     proposalId,
@@ -375,7 +358,6 @@ export const Backend = {
                     createdAt: new Date().toISOString()
                 });
 
-                // Atualiza Média do Profissional Mockado
                 const pro = TOP_PROFESSIONALS.find(u => u.id === targetId) || MOCK_PROFESSIONAL;
                 if (pro) {
                     const currentRating = pro.rating || 5;
@@ -385,22 +367,22 @@ export const Backend = {
                     pro.rating = parseFloat(newRating.toFixed(1));
                     pro.reviewsCount = newCount;
                     
-                    // Se for o mock principal, atualiza ele também
                     if (targetId === MOCK_PROFESSIONAL.id) {
                         MOCK_PROFESSIONAL.rating = pro.rating;
                         MOCK_PROFESSIONAL.reviewsCount = pro.reviewsCount;
                     }
                 }
-
                 return { success: true };
-            }
+            },
+            "Submit Review"
         );
     },
 
     getUserChats: async (id: number) => {
         return tryApiOrMock(
             async () => await apiFetch('/api/chats'),
-            () => MOCK_CHATS
+            () => MOCK_CHATS,
+            "Get Chats"
         );
     },
 
@@ -422,7 +404,8 @@ export const Backend = {
                     chat.lastMessage = type === 'image' ? '📷 Imagem' : text;
                 }
                 return { success: true };
-            }
+            },
+            "Send Message"
         );
     },
 
@@ -436,7 +419,8 @@ export const Backend = {
                     msg.scheduleData.status = status as any;
                 }
                 return { success: true };
-            }
+            },
+            "Update Msg Status"
         );
     },
 
@@ -445,7 +429,7 @@ export const Backend = {
         if (!res) throw new Error("API call returned null");
         if (Array.isArray(res) && res.length === 0) throw new Error("No pros found");
         return res;
-    }, () => TOP_PROFESSIONALS),
+    }, () => TOP_PROFESSIONALS, "Get Top Pros"),
 
     getPublicProfile: async (userId: number): Promise<{user: User, portfolio: PortfolioItem[], reviews: Review[]}> => {
         return tryApiOrMock(
@@ -457,28 +441,32 @@ export const Backend = {
                     { id: 2, userId: userId, imageUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400', description: 'Obra 2' }
                 ];
                 return { user, portfolio, reviews: MOCK_PROFILE_REVIEWS };
-            }
+            },
+            "Get Profile"
         );
     },
 
     getAdminStats: async (): Promise<AdminStats> => {
         return tryApiOrMock(
             async () => await apiFetch('/api/admin/stats'),
-            () => ({ totalUsers: 1540, activeJobs: 42, revenue: 12500.00, reportsPending: 3, onlineUsers: 125, loggedInUsers: 80, subscriptionPrice: 19.90 })
+            () => ({ totalUsers: 1540, activeJobs: 42, revenue: 12500.00, reportsPending: 3, onlineUsers: 125, loggedInUsers: 80, subscriptionPrice: 19.90 }),
+            "Get Stats"
         );
     },
     
     getAllUsers: async (): Promise<User[]> => {
         return tryApiOrMock(
             async () => await apiFetch('/api/admin/users'),
-            () => [MOCK_CONTRACTOR, MOCK_PROFESSIONAL, MOCK_ADMIN, ...TOP_PROFESSIONALS]
+            () => [MOCK_CONTRACTOR, MOCK_PROFESSIONAL, MOCK_ADMIN, ...TOP_PROFESSIONALS],
+            "Get Users"
         );
     },
 
     updateUserStatus: async (id: number, status: string) => {
         return tryApiOrMock(
             async () => await apiFetch(`/api/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
-            () => ({ success: true })
+            () => ({ success: true }),
+            "Update User Status"
         );
     },
 
@@ -491,27 +479,59 @@ export const Backend = {
             },
             () => {
                 const existing: Appointment[] = [];
-                
-                // 1. Propostas Abertas do Contratante (Meus Pedidos)
-                const myOpenProposals = MOCK_PROPOSALS.filter(p => p.contractorId === userId && p.status === ProposalStatus.OPEN);
-                myOpenProposals.forEach(p => {
+                // 1. Propostas onde sou o profissional (NEGOTIATING ou COMPLETED)
+                const myAccepted = MOCK_PROPOSALS.filter(p => p.professionalId === userId);
+                myAccepted.forEach(p => {
+                    const chat = MOCK_CHATS.find(c => c.proposalId === p.id);
                     existing.push({
-                        id: `prop_${p.id}`,
+                        id: `job_${p.id}`,
+                        chatId: chat?.id,
                         title: p.title || p.areaTag,
-                        withUser: "Aguardando Profissional",
-                        avatarUrl: "https://ui-avatars.com/api/?name=?&background=f3f4f6&color=6b7280", 
-                        date: new Date().toISOString().split('T')[0], 
-                        time: "---", 
-                        status: 'PENDING',
+                        withUser: p.contractorName,
+                        avatarUrl: p.contractorAvatar || "https://ui-avatars.com/api/?name=C&background=f3f4f6&color=6b7280",
+                        date: new Date(p.createdAt).toISOString().split('T')[0],
+                        time: new Date(p.createdAt).toLocaleTimeString().slice(0,5),
+                        status: p.status === 'COMPLETED' ? 'CONFIRMED' : 'PENDING',
                         location: p.location,
-                        isProposal: true 
+                        isProposal: false
                     });
                 });
 
-                // 2. Agendamentos via Chat (Simulado extraindo de mensagens)
-                // Para MVP Mockado, vamos retornar uma lista fixa + propostas
+                // 2. Propostas onde sou contratante (OPEN, NEGOTIATING, COMPLETED)
+                const myOpenProposals = MOCK_PROPOSALS.filter(p => p.contractorId === userId);
+                myOpenProposals.forEach(p => {
+                    // Evita duplicatas se já foi tratado acima (caso eu seja contratante e profissional em testes)
+                    if (existing.find(e => e.id === `job_${p.id}`)) return;
+                    
+                    const chat = MOCK_CHATS.find(c => c.proposalId === p.id);
+                    // Se estiver em negociação, tenta achar o nome do profissional
+                    let otherName = "Aguardando Profissional";
+                    let otherAvatar = "https://ui-avatars.com/api/?name=A&background=f3f4f6&color=6b7280";
+                    
+                    if (p.professionalId) {
+                         const pro = TOP_PROFESSIONALS.find(u => u.id === p.professionalId) || MOCK_PROFESSIONAL;
+                         if (pro) {
+                             otherName = pro.name;
+                             otherAvatar = pro.avatarUrl || "";
+                         }
+                    }
+
+                    existing.push({
+                        id: `job_${p.id}`,
+                        chatId: chat?.id,
+                        title: p.title || p.areaTag,
+                        withUser: otherName,
+                        avatarUrl: otherAvatar,
+                        date: new Date(p.createdAt).toISOString().split('T')[0], 
+                        time: new Date(p.createdAt).toLocaleTimeString().slice(0,5), 
+                        status: p.status === 'OPEN' ? 'PENDING' : 'CONFIRMED',
+                        location: p.location,
+                        isProposal: p.status === 'OPEN' 
+                    });
+                });
                 return existing;
-            }
+            },
+            "Get Appointments"
         );
     },
 
@@ -523,9 +543,7 @@ export const Backend = {
     getNotifications: async (userId: number, role: UserRole) => [] as Notification[],
     markNotificationRead: async (id: string) => {},
     
-    // Carteira Mockada Dinâmica
     getUserWallet: async (userId: number, role: UserRole) => {
-        // Retorna o saldo da memória volátil para ver a mudança
         if (role === UserRole.CONTRACTOR) {
             return { balance: MOCK_WALLET_CONTRACTOR, transactions: MOCK_TRANSACTIONS_MEMORY.filter(t => t.userId === userId) };
         } else {

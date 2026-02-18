@@ -223,6 +223,7 @@ const AdminDashboard: React.FC = () => {
                         loadData(); 
                     }}
                     onRefresh={loadData}
+                    className="w-full h-full flex flex-col md:flex-row bg-white overflow-hidden relative"
                 />
             </div>
         </div>

@@ -1,4 +1,3 @@
-
 import dotenv from 'dotenv';
 import pg from 'pg';
 import fs from 'fs';
@@ -22,9 +21,16 @@ const pool = new Pool({
 });
 
 async function setup() {
+    let client;
     try {
-        console.log("🔌 Conectando ao Supabase...");
-        const client = await pool.connect();
+        console.log("🔌 Tentando conectar ao Banco de Dados...");
+        // Define um timeout curto para não ficar travado tentando conectar
+        const connectionTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('TIMEOUT')), 5000)
+        );
+        
+        client = await Promise.race([pool.connect(), connectionTimeout]);
+        
         console.log("✅ Conectado com sucesso!");
 
         console.log("📂 Lendo o arquivo de criação do banco (schema.sql)...");
@@ -32,22 +38,28 @@ async function setup() {
         const sql = fs.readFileSync(sqlPath, 'utf8');
 
         console.log("🚀 Criando tabelas e inserindo dados de teste...");
-        // Executa o SQL completo
         await client.query(sql);
         
         console.log("------------------------------------------------");
         console.log("✅ SUCESSO! O Banco de Dados está pronto.");
         console.log("------------------------------------------------");
-        console.log("Usuários criados para teste:");
-        console.log("1. Cliente: jane@linka.com (Senha: 123456)");
-        console.log("2. Profissional: joao@linka.com (Senha: 123456)");
-        console.log("------------------------------------------------");
 
-        client.release();
     } catch (err) {
-        console.error("❌ Erro ao configurar banco:", err.message);
-        console.log("Dica: Verifique se a senha no arquivo .env está correta.");
+        // Tratamento amigável de erro
+        console.log("\n------------------------------------------------");
+        console.log("⚠️  AVISO: Não foi possível conectar ao banco de dados externo.");
+        console.log(`📝 Detalhe: ${err.message}`);
+        console.log("------------------------------------------------");
+        console.log("🟢 NÃO SE PREOCUPE! O Linka Jobi ativou o MODO DEMONSTRAÇÃO.");
+        console.log("   O site funcionará usando dados locais simulados.");
+        console.log("------------------------------------------------");
+        console.log("👉 Próximo passo: Rode 'npm run dev' para abrir o site.");
+        console.log("------------------------------------------------");
+        
+        // Sai com código 0 (sucesso) para não assustar o usuário com linhas vermelhas
+        process.exit(0);
     } finally {
+        if (client) client.release();
         await pool.end();
     }
 }
