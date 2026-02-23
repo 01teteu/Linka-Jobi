@@ -214,10 +214,19 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
         </div>
 
         {/* Lado Direito - Formulário */}
-        <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-24 py-12 relative bg-background overflow-y-auto max-h-screen">
-            <div className="max-w-md w-full mx-auto animate-fade-in-up">
+        <div className="w-full lg:w-1/2 flex flex-col px-8 sm:px-12 lg:px-24 relative bg-background overflow-y-auto h-screen">
+            <div className="max-w-md w-full mx-auto my-auto py-12 animate-fade-in-up">
                 
                 <div className="mb-8">
+                    {viewState === 'register' && (
+                        <button 
+                            onClick={() => setViewState('login')}
+                            className="flex items-center gap-2 text-textMuted hover:text-primary transition-colors mb-6 text-sm font-bold group"
+                        >
+                            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Voltar para Login
+                        </button>
+                    )}
+
                     <div className="flex items-center gap-3 mb-6">
                         <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
                             <ShieldCheck size={24} />
@@ -244,7 +253,7 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
                 {/* Seletor de Role (Apenas Cadastro) */}
                 {viewState === 'register' && (
-                    <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                         <RoleCard 
                             active={role === UserRole.CONTRACTOR} 
                             onClick={() => setRole(UserRole.CONTRACTOR)} 

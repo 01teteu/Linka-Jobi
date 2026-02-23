@@ -4,6 +4,7 @@ import { ChatSession, Message, User, ProposalStatus } from '../types';
 import { Send, AlertTriangle, CheckCheck, MessageSquare, ChevronLeft, CheckCircle2, Paperclip, Calendar, Image as ImageIcon, X, Phone, MoreVertical, ShieldCheck, DollarSign } from 'lucide-react';
 import { Backend } from '../services/mockBackend';
 import ScheduleModal from './ScheduleModal';
+import { io, Socket } from 'socket.io-client';
 
 interface ChatInterfaceProps {
     user: User;
@@ -19,15 +20,52 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
     const [newMessage, setNewMessage] = useState('');
     const [showList, setShowList] = useState(true);
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+    const [localMessages, setLocalMessages] = useState<Message[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const socketRef = useRef<Socket | null>(null);
 
-    // Polling rápido para chat (3 segundos)
+    // Inicializa Socket
     useEffect(() => {
-        if (!onRefresh) return;
-        const interval = setInterval(onRefresh, 3000);
-        return () => clearInterval(interval);
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        socketRef.current = io('/', {
+            auth: { token }
+        });
+
+        socketRef.current.on('connect', () => {
+            console.log("Connected to socket");
+        });
+
+        socketRef.current.on('new_message', (msg: Message) => {
+            // Se a mensagem for deste chat, adiciona na lista local
+            setLocalMessages(prev => [...prev, msg]);
+            // Também dispara refresh global para atualizar lista lateral e unread counts
+            onRefresh?.();
+        });
+
+        return () => {
+            socketRef.current?.disconnect();
+        };
     }, [onRefresh]);
+
+    // Entra na sala do chat ativo
+    useEffect(() => {
+        if (activeChatId && socketRef.current) {
+            socketRef.current.emit('join_chat', activeChatId);
+            // Carrega mensagens iniciais do chat selecionado
+            const chat = chats.find(c => c.id === activeChatId);
+            if (chat) {
+                setLocalMessages(chat.messages);
+            }
+        }
+        return () => {
+            if (activeChatId && socketRef.current) {
+                socketRef.current.emit('leave_chat', activeChatId);
+            }
+        };
+    }, [activeChatId, chats]);
 
     // Seleciona o primeiro chat se nada selecionado e estiver em desktop
     useEffect(() => {
@@ -39,17 +77,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
     // Scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [activeChatId, chats]);
+    }, [activeChatId, localMessages]);
 
     const activeChat = chats.find(c => c.id === activeChatId);
     const otherParticipant = activeChat?.participants.find(p => p.id !== user.id);
     const isCompleted = activeChat?.proposalStatus === ProposalStatus.COMPLETED;
     const isContractor = activeChat && user.id === activeChat.contractorId;
 
-    const handleSendText = (e: React.FormEvent) => {
+    const handleSendText = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!newMessage.trim()) return;
-        onSendMessage(activeChatId, newMessage);
+        
+        // Envia via API (que vai disparar o evento socket de volta)
+        await Backend.sendMessage(activeChatId, user.id, newMessage, 'text');
         setNewMessage('');
     };
 
@@ -291,7 +331,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onSendMessag
                                 backgroundSize: '20px 20px'
                             }}
                         >
-                            {activeChat.messages.map((msg, idx) => {
+                            {localMessages.map((msg, idx) => {
                                 const isMe = msg.senderId === user.id;
                                 if (msg.isSystem) return (
                                     <div key={idx} className="flex justify-center my-6">

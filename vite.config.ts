@@ -14,13 +14,8 @@ export default defineConfig(({ mode }) => {
       // API Key removida por segurança. O Frontend não deve ter acesso a ela.
     },
     server: {
-      proxy: {
-        // Redireciona chamadas /api para o backend em Node.js rodando na porta 3000
-        '/api': {
-          target: 'http://localhost:3000',
-          changeOrigin: true,
-          secure: false,
-        },
+      hmr: {
+        clientPort: 443,
       },
     },
   };
