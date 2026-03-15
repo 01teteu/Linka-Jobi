@@ -20,6 +20,7 @@ import NotificationPanel from './components/NotificationPanel';
 import MapInterface from './components/MapInterface'; 
 import CalendarInterface from './components/CalendarInterface'; 
 import GamificationHub from './components/GamificationHub'; 
+import PortfolioRequirementModal from './components/PortfolioRequirementModal';
 import { DEFAULT_CATEGORIES, DEFAULT_SERVICES } from './constants'; 
 
 import { 
@@ -28,6 +29,7 @@ import {
   Star, LayoutGrid, ShieldCheck, Heart, Sparkles, MessageCircle, ArrowRight, Calendar, Trophy, Settings, X, Loader2, Bell, Map, List, HelpCircle, FileText, ChevronRight, Filter, ArrowUpRight, Briefcase, PieChart,
   ChevronLeft, SlidersHorizontal, Hourglass, Radar
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 const PAGE_SIZE = 10;
 
@@ -85,11 +87,18 @@ const App: React.FC = () => {
   const [searchViewMode, setSearchViewMode] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [distanceRadius, setDistanceRadius] = useState<number | 'Infinity'>('Infinity');
+  const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState(false);
+  const [filterBySpecialty, setFilterBySpecialty] = useState(true);
+  const [targetChatId, setTargetChatId] = useState<number | null>(null);
+  const [professionalStats, setProfessionalStats] = useState<ProfessionalDashboardStats>(MOCK_PRO_STATS);
 
   useEffect(() => {
     const initApp = async () => {
         try {
             await new Promise(r => setTimeout(r, 800));
+            // Try to seed database silently
+            fetch('/api/seed', { method: 'POST' }).catch(() => {});
+            
             const session = await Backend.init();
             if (session && session.user) {
                 setUser(session.user);
@@ -108,6 +117,15 @@ const App: React.FC = () => {
     initApp();
   }, []);
 
+  const isPortfolioIncomplete = user.role === UserRole.PROFESSIONAL && (!user.portfolio || user.portfolio.length === 0);
+
+  useEffect(() => {
+      if (user.id !== 0 && isPortfolioIncomplete) {
+          setIsPortfolioModalOpen(true);
+          if (view !== 'dashboard') setView('dashboard');
+      }
+  }, [user.id, isPortfolioIncomplete, view]);
+
   const loadSearchData = async () => {
       try {
           const pros = await Backend.getTopProfessionals();
@@ -117,11 +135,35 @@ const App: React.FC = () => {
       }
   };
 
+  const loadProfessionalStats = async () => {
+      if (user.role !== UserRole.PROFESSIONAL) return;
+      try {
+          const stats = await Backend.getProfessionalStats();
+          if (stats) setProfessionalStats(stats);
+      } catch (e) {
+          console.error("Failed to load professional stats", e);
+      }
+  };
+
+  useEffect(() => {
+      if (user.id !== 0 && view === 'dashboard') {
+          loadProfessionalStats();
+      }
+  }, [user.id, view]);
+
   const loadCatalog = async () => {
     try {
         const [cats, servs] = await Promise.all([Backend.getCategories(), Backend.getServices()]);
+        
+        // Deduplicate services by ID and Name
+        const uniqueServices = servs && servs.length > 0 ? servs.filter((s, index, self) => 
+            index === self.findIndex((t) => (
+                t.id === s.id || t.name === s.name
+            ))
+        ) : DEFAULT_SERVICES;
+
         setCategories(cats && cats.length > 0 ? cats : DEFAULT_CATEGORIES);
-        setServices(servs && servs.length > 0 ? servs : DEFAULT_SERVICES);
+        setServices(uniqueServices);
     } catch (error) {
         setCategories(DEFAULT_CATEGORIES);
         setServices(DEFAULT_SERVICES);
@@ -135,15 +177,93 @@ const App: React.FC = () => {
           setProposals([]); 
           refreshData(1, true); 
       }
-      if (user.id !== 0 && view === 'chats') refreshChats();
-      if (user.id !== 0) loadNotifications();
-  }, [user, selectedCategoryId, view, distanceRadius]); 
+  }, [user.id, view, distanceRadius, filterBySpecialty]); 
+
+  useEffect(() => {
+      if (user.id !== 0 && view === 'chats') {
+          refreshChats();
+      }
+  }, [user.id, view]);
+
+  useEffect(() => {
+      if (user.id !== 0) {
+          loadNotifications();
+          loadFavorites();
+      }
+  }, [user.id]);
+
+  // Socket.io Connection for Real-time Notifications
+  useEffect(() => {
+      if (user.id !== 0) {
+          const token = localStorage.getItem('token');
+          const socket = io(window.location.origin, {
+              auth: { token }
+          });
+
+          socket.on('connect', () => {
+              console.log('Socket connected');
+          });
+
+          socket.on('notification', (data: any) => {
+              addToast(data.message, 'info');
+              
+              // Play notification sound if available (optional)
+              try {
+                  const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                  audio.volume = 0.5;
+                  audio.play().catch(() => {});
+              } catch (e) {}
+
+              setNotifications(prev => [{
+                  id: Date.now().toString(),
+                  userId: user.id,
+                  type: data.type,
+                  title: data.title,
+                  message: data.message,
+                  isRead: false,
+                  createdAt: new Date().toISOString()
+              }, ...prev]);
+
+              // Se for notificação de mensagem, atualiza a lista de chats
+              if (data.type === 'MESSAGE') {
+                  refreshChats();
+              }
+          });
+
+          return () => {
+              socket.disconnect();
+          };
+      }
+  }, [user.id]);
 
   const loadNotifications = async () => {
       try {
           const notifs = await Backend.getNotifications(user.id, user.role);
           setNotifications(notifs);
       } catch(e) {}
+  };
+
+  const loadFavorites = async () => {
+      try {
+          const favs = await Backend.getFavorites();
+          setFavorites(favs || []);
+      } catch (e) {}
+  };
+
+  const toggleFavorite = async (professionalId: number) => {
+      try {
+          const res = await Backend.toggleFavorite(professionalId);
+          if (res.favorited) {
+              addToast("Adicionado aos favoritos!", "success");
+              // Optimistic update or reload
+              loadFavorites();
+          } else {
+              addToast("Removido dos favoritos.", "info");
+              setFavorites(prev => prev.filter(f => f.id !== professionalId));
+          }
+      } catch (e) {
+          addToast("Erro ao atualizar favoritos.", "error");
+      }
   };
 
   const handleMarkNotificationRead = async (id: string) => {
@@ -173,12 +293,17 @@ const App: React.FC = () => {
                       distanceRadius === 'Infinity' ? undefined : distanceRadius
                   );
                   
-                  if (user.specialty) {
-                      const mySpecs = user.specialty.split(',').map(s => s.trim());
-                      allProposals = allProposals.filter(p => mySpecs.includes(p.areaTag));
+                  const fetchedCount = allProposals.length;
+                  
+                  if (filterBySpecialty && user.specialty) {
+                      const mySpecs = user.specialty.split(',').map(s => s.trim().toLowerCase());
+                      allProposals = allProposals.filter(p => {
+                          const tag = p.areaTag.toLowerCase();
+                          return mySpecs.some(spec => tag.includes(spec) || spec.includes(tag));
+                      });
                   }
 
-                  if (allProposals.length < PAGE_SIZE) setHasMore(false);
+                  if (fetchedCount < PAGE_SIZE) setHasMore(false);
                   else setHasMore(true);
 
                   if (shouldReplace) setProposals(allProposals);
@@ -186,7 +311,7 @@ const App: React.FC = () => {
               } 
               else if (user.role === UserRole.CONTRACTOR) {
                   const myProps = await Backend.getProposals(
-                      undefined, 1, 5, undefined, undefined, undefined, user.id
+                      undefined, 1, 50, undefined, undefined, undefined, user.id
                   );
                   setMyProposals(myProps.filter(p => p.status === ProposalStatus.OPEN));
               }
@@ -228,10 +353,14 @@ const App: React.FC = () => {
 
   const handleAcceptProposal = async (proposalId: number) => {
       try {
-          await Backend.acceptProposal(proposalId, user.id);
-          // Não redirecionamos mais automaticamente para o chat, pois a animação do card diz "Adicionado à agenda"
+          const response = await Backend.acceptProposal(proposalId, user.id);
           refreshData(1, true);
-          // O usuário pode ir para a agenda ou feed.
+          
+          if (response.chatId) {
+              setTargetChatId(response.chatId);
+              await refreshChats(); // Ensure chat list is updated
+              setView('chats');
+          }
       } catch (error: any) {
           addToast(error.message || "Erro ao aceitar.", "error");
       }
@@ -252,27 +381,50 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (chatId: number, text: string) => {
+  const handleCancelProposal = async (proposalId: number) => {
       try {
-        await Backend.sendMessage(chatId, user.id, text);
-        refreshChats(); 
+          await Backend.cancelProposal(proposalId);
+          addToast("Pedido cancelado com sucesso.", "success");
+          setViewProposal(null);
+          refreshData(1, true);
+      } catch (error: any) {
+          addToast(error.message || "Erro ao cancelar pedido.", "error");
+      }
+  };
+
+  const handleHireProfessional = async (proposalId: number, professionalId: number) => {
+      try {
+          await Backend.hireProfessional(proposalId, professionalId);
+          addToast('Profissional contratado com sucesso!', 'success');
+          refreshChats();
+      } catch (e) {
+          addToast('Erro ao contratar profissional.', 'error');
+      }
+  };
+
+  const handleCompleteJob = async (proposalId: number, professionalId?: number) => {
+      try {
+          await Backend.completeProposal(proposalId, professionalId);
+          refreshChats();
+          const chat = (chats || []).find(c => c.proposalId === proposalId && c.professionalId === professionalId);
+          if (chat) {
+              const proName = chat.participants.find(p => p.id === chat.professionalId)?.name || 'Profissional';
+              addToast(`Contrato fechado com ${proName}`, "success");
+              setReviewProposalId(proposalId);
+              setReviewTargetId(chat.professionalId);
+              setReviewTargetName(proName);
+              setIsReviewModalOpen(true);
+          } else {
+              addToast("Contrato fechado!", "success");
+          }
       } catch (e) {}
   };
 
-  const handleCompleteJob = async (proposalId: number) => {
-      try {
-          await Backend.completeProposal(proposalId);
-          addToast("Serviço finalizado!", "success");
-          refreshChats();
-          const chat = (chats || []).find(c => c.proposalId === proposalId);
-          if (chat) {
-              setReviewProposalId(proposalId);
-              setReviewTargetId(chat.professionalId);
-              const proName = chat.participants.find(p => p.id === chat.professionalId)?.name || 'Profissional';
-              setReviewTargetName(proName);
-              setIsReviewModalOpen(true);
-          }
-      } catch (e) {}
+  const handleReview = (proposalId: number, targetId: number, targetName: string) => {
+      setReviewProposalId(proposalId);
+      setReviewTargetId(targetId);
+      setReviewTargetName(targetName);
+      setIsReviewModalOpen(true);
   };
 
   const handleSubmitReview = async (rating: number, comment: string) => {
@@ -298,8 +450,39 @@ const App: React.FC = () => {
       }
   };
   
-  const handleViewProfile = (pro: User) => setViewProfileUser(pro);
+  const handleViewProfile = (pro: User) => {
+      setViewProfileUser(pro);
+      Backend.incrementProfileViews(pro.id).catch(() => {});
+  };
   
+  const handleSwitchToAdmin = async () => {
+      if (!user) return;
+      try {
+          await Backend.promoteToAdmin();
+          const adminUser: User = { ...user, role: UserRole.ADMIN };
+          setUser(adminUser);
+          setView('admin');
+          addToast("Modo Admin ativado (Demo)", "success");
+      } catch (e) {
+          console.error(e);
+          addToast("Erro ao ativar modo admin", "error");
+      }
+  };
+
+  const handleContactSupport = async () => {
+      try {
+          const res = await Backend.contactSupport();
+          if (res.chatId) {
+              setTargetChatId(res.chatId);
+              await refreshChats(); // Ensure chat list is updated
+              setView('chats');
+              setIsSettingsOpen(false);
+          }
+      } catch (e) {
+          addToast("Erro ao contatar suporte.", "error");
+      }
+  };
+
   if (isAppLoading) {
       return (
           <div className="min-h-screen bg-primary flex flex-col items-center justify-center animate-fade-in-up">
@@ -317,17 +500,17 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-background text-secondary font-sans selection:bg-primary/20">
       <main className={`${isAdminView ? "h-screen overflow-hidden" : "pb-28"}`}>
-        {view === 'admin' && <AdminDashboard />}
+        {view === 'admin' && <AdminDashboard user={user} onExit={() => setView('feed')} />}
         {view === 'feed' && renderFeed()}
         {view === 'search' && renderSearch()} 
-        {view === 'dashboard' && <ProfessionalDashboard stats={MOCK_PRO_STATS} />} 
+        {view === 'dashboard' && <ProfessionalDashboard stats={professionalStats} user={user} onUpdateUser={handleUpdateUser} />} 
         {view === 'calendar' && <CalendarInterface user={user} onViewProposal={handleViewProposalFromCalendar} />}
         {view === 'gamification' && <GamificationHub user={user} onBack={() => setView('profile')} />} 
-        {view === 'chats' && <ChatInterface user={user} chats={chats} onSendMessage={handleSendMessage} onRefresh={refreshChats} onComplete={handleCompleteJob} />}
+        {view === 'chats' && <ChatInterface user={user} chats={chats} initialChatId={targetChatId} onRefresh={refreshChats} onComplete={handleCompleteJob} onHire={handleHireProfessional} onReview={handleReview} onViewProfile={handleViewProfile} />}
         {view === 'profile' && renderProfile()} 
       </main>
 
-      {!isAdminView && (
+      {!isAdminView && !isPortfolioIncomplete && (
           <div className="fixed bottom-0 left-0 right-0 glass px-6 pb-6 pt-4 z-[100] border-t border-white/50">
             <div className="flex items-center justify-around max-w-lg mx-auto">
               <NavBtn active={view === 'feed'} onClick={() => setView('feed')} icon={<Home />} label="Home" />
@@ -349,12 +532,28 @@ const App: React.FC = () => {
       )}
 
       <CreateProposalModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSubmit={handleCreateProposal} initialCategory={modalInitialCategory} targetProfessional={directHireProfessional} />
-      <ProposalDetailModal isOpen={!!viewProposal} onClose={() => setViewProposal(null)} proposal={viewProposal} />
+      <ProposalDetailModal isOpen={!!viewProposal} onClose={() => setViewProposal(null)} proposal={viewProposal} onCancel={handleCancelProposal} currentUserId={user.id} />
       <SecurityModal isOpen={isSecurityModalOpen} onClose={() => setIsSecurityModalOpen(false)} />
-      <FavoritesModal isOpen={isFavoritesModalOpen} onClose={() => setIsFavoritesModalOpen(false)} favorites={favorites} onRemove={id => {}} onOpenSubscription={() => {}} isSubscriber={true} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />
+      <FavoritesModal 
+          isOpen={isFavoritesModalOpen} 
+          onClose={() => setIsFavoritesModalOpen(false)} 
+          favorites={favorites} 
+          onRemove={toggleFavorite} 
+          onOpenSubscription={() => {}} 
+          isSubscriber={true} 
+          onViewProfile={handleViewProfile}
+      />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} onSwitchToAdmin={handleSwitchToAdmin} onContactSupport={handleContactSupport} />
       <ReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} onSubmit={handleSubmitReview} professionalName={reviewTargetName} />
-      <PublicProfileModal isOpen={!!viewProfileUser} onClose={() => setViewProfileUser(null)} professional={viewProfileUser} onRequestQuote={() => { setViewProfileUser(null); setDirectHireProfessional(viewProfileUser); setModalOpen(true); }} />
+      <PublicProfileModal 
+          isOpen={!!viewProfileUser} 
+          onClose={() => setViewProfileUser(null)} 
+          professional={viewProfileUser} 
+          onRequestQuote={() => { setViewProfileUser(null); setDirectHireProfessional(viewProfileUser); setModalOpen(true); }} 
+          isFavorite={viewProfileUser ? favorites.some(f => f.id === viewProfileUser.id) : false}
+          onToggleFavorite={toggleFavorite}
+      />
+      <PortfolioRequirementModal isOpen={isPortfolioModalOpen} onConfirm={() => { setIsPortfolioModalOpen(false); setView('dashboard'); }} />
     </div>
   );
   
@@ -378,7 +577,13 @@ const App: React.FC = () => {
                     {notifications.filter(n => !n.read).length > 0 && <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-accent rounded-full border-2 border-white"></div>}
                 </button>
                 <div className="relative cursor-pointer group" onClick={() => setView('profile')}>
-                    <img src={user.avatarUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover group-hover:scale-105 transition-transform" />
+                    {user.avatarUrl ? (
+                        <img src={user.avatarUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover group-hover:scale-105 transition-transform" />
+                    ) : (
+                        <div className="w-12 h-12 rounded-full border-2 border-white shadow-md bg-gray-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                            <UserIcon size={24} className="text-gray-400" />
+                        </div>
+                    )}
                 </div>
             </div>
         </header>
@@ -458,7 +663,9 @@ const App: React.FC = () => {
                                                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                                                           <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                                                         </span>
-                                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Buscando...</span>
+                                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wide">
+                                                            {p.acceptedByCount === 0 ? 'Buscando Profissionais' : p.acceptedByCount === 1 ? '1 Proposta Recebida' : `${p.acceptedByCount} Propostas Recebidas`}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -478,10 +685,19 @@ const App: React.FC = () => {
                     <h3 className="text-base font-black text-secondary mb-5 flex items-center gap-2 tracking-tight"><Star className="text-yellow-400 fill-yellow-400" size={20} /> Profissionais Recomendados</h3>
                     <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
                         {topPros.map(pro => (
-                            <button key={pro.id} onClick={() => handleViewProfile(pro)} className="relative min-w-[150px] w-[150px] h-[200px] rounded-[1.5rem] overflow-hidden shadow-card group shrink-0">
+                            <div key={pro.id} onClick={() => handleViewProfile(pro)} className="relative min-w-[150px] w-[150px] h-[200px] rounded-[1.5rem] overflow-hidden shadow-card group shrink-0 cursor-pointer">
                                 <img src={pro.avatarUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={pro.name} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
                                 
+                                <div className="absolute top-3 left-3 z-20">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); toggleFavorite(pro.id); }}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md border transition-all ${favorites.some(f => f.id === pro.id) ? 'bg-white text-red-500 border-white' : 'bg-black/20 text-white border-white/30 hover:bg-white hover:text-red-500'}`}
+                                    >
+                                        <Heart size={14} className={favorites.some(f => f.id === pro.id) ? 'fill-current' : ''} />
+                                    </button>
+                                </div>
+
                                 <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-md border border-white/30 px-2 py-1 rounded-lg flex items-center gap-1">
                                     <Star size={10} className="text-yellow-400 fill-yellow-400" />
                                     <span className="text-[10px] font-black text-white">{pro.rating}</span>
@@ -491,7 +707,7 @@ const App: React.FC = () => {
                                     <p className="text-white/70 text-[9px] font-black uppercase tracking-widest mb-1 truncate w-28">{pro.specialty}</p>
                                     <h4 className="text-white font-black text-base leading-tight truncate w-28">{pro.name.split(' ')[0]}</h4>
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -538,7 +754,7 @@ const App: React.FC = () => {
                         </div>
                     </div>
                     
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
                         {[5, 10, 30, 'Infinity'].map((val) => (
                             <button
                                 key={val}
@@ -552,6 +768,22 @@ const App: React.FC = () => {
                                 {val === 'Infinity' ? 'Sem limite' : `Até ${val}km`}
                             </button>
                         ))}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                        <span className="text-xs font-bold text-secondaryMuted">Apenas minha especialidade</span>
+                        <button 
+                            onClick={() => { 
+                                const newState = !filterBySpecialty;
+                                setFilterBySpecialty(newState); 
+                                // Trigger refresh manually since state update is async and we need to pass the new value or wait for effect
+                                // But refreshData uses the state variable, so we need to wait for re-render or pass arg.
+                                // Simpler: just set state, and add filterBySpecialty to useEffect dependency of refreshData call
+                            }}
+                            className={`w-10 h-6 rounded-full p-1 transition-colors duration-300 ${filterBySpecialty ? 'bg-primary' : 'bg-gray-200'}`}
+                        >
+                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${filterBySpecialty ? 'translate-x-4' : ''}`} />
+                        </button>
                     </div>
                 </div>
 
@@ -586,20 +818,50 @@ const App: React.FC = () => {
             </div>
 
             {!searchQuery && !browsingCategory && (
-                <div className="grid grid-cols-2 gap-3">
-                    {categories.map(cat => (
-                        <button key={cat.id} onClick={() => setBrowsingCategory(cat.id)} className="relative h-32 rounded-2xl overflow-hidden shadow-sm group active:scale-95 transition-transform">
-                            <img src={cat.imageUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={cat.name} />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                            <span className="absolute bottom-3 left-3 text-white font-bold text-sm leading-tight">{cat.name}</span>
-                        </button>
-                    ))}
-                    <div onClick={() => setSearchViewMode('map')} className="col-span-2 bg-secondary p-6 rounded-2xl text-white flex justify-between items-center cursor-pointer shadow-lg mt-2">
-                        <div>
-                            <h3 className="font-bold text-lg mb-1">Mapa de Profissionais</h3>
-                            <p className="text-xs text-white/70">Encontre ajuda perto de você</p>
+                <div className="space-y-6">
+                    {/* New Map Card */}
+                    <div onClick={() => setSearchViewMode('map')} className="relative w-full h-48 bg-secondary rounded-[2rem] overflow-hidden shadow-xl cursor-pointer group transform transition-all hover:shadow-2xl active:scale-[0.98]">
+                         {/* Background Map Pattern/Image */}
+                         <div className="absolute inset-0 opacity-30 bg-[url('https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?q=80&w=1000&auto=format&fit=crop')] bg-cover bg-center transition-transform duration-1000 group-hover:scale-110"></div>
+                         <div className="absolute inset-0 bg-gradient-to-r from-secondary via-secondary/80 to-transparent"></div>
+                         
+                         <div className="absolute inset-0 p-8 flex flex-col justify-center items-start z-10">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white shadow-inner border border-white/10">
+                                    <Map size={24} />
+                                </div>
+                                <span className="bg-green-500/20 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] font-black text-green-300 uppercase tracking-widest border border-green-500/30 flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                    Ao vivo
+                                </span>
+                            </div>
+                            <h3 className="font-display font-black text-3xl text-white leading-none mb-2 tracking-tight">Mapa de<br/>Profissionais</h3>
+                            <p className="text-white/70 text-sm font-medium max-w-[220px] leading-relaxed">Encontre especialistas qualificados próximos a você agora mesmo.</p>
+                         </div>
+
+                         <div className="absolute right-8 bottom-8 w-14 h-14 bg-white text-secondary rounded-full flex items-center justify-center shadow-[0_10px_20px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform z-10">
+                            <ArrowRight size={24} strokeWidth={2.5} />
+                         </div>
+                         
+                         {/* Decorative Circles */}
+                         <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl"></div>
+                         <div className="absolute right-20 bottom-10 w-20 h-20 bg-blue-500/20 rounded-full blur-2xl"></div>
+                    </div>
+
+                    <div>
+                        <h3 className="font-bold text-secondary text-lg mb-4 px-1 flex items-center gap-2">
+                            <LayoutGrid size={18} className="text-primary" />
+                            Categorias
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3">
+                            {categories.map(cat => (
+                                <button key={cat.id} onClick={() => setBrowsingCategory(cat.id)} className="relative h-32 rounded-[1.5rem] overflow-hidden shadow-sm group active:scale-95 transition-transform border border-gray-100">
+                                    <img src={cat.imageUrl} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={cat.name} />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                                    <span className="absolute bottom-4 left-4 text-white font-bold text-sm leading-tight text-left">{cat.name}</span>
+                                </button>
+                            ))}
                         </div>
-                        <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center"><Map size={20} /></div>
                     </div>
                 </div>
             )}
@@ -624,13 +886,37 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {searchViewMode === 'map' && (
-                <div className="fixed inset-0 z-[150] bg-white flex flex-col animate-scale-in">
-                    <div className="p-4 flex justify-between items-center bg-white z-10 border-b border-gray-100">
-                        <h2 className="font-bold text-lg text-secondary">Mapa</h2>
-                        <button onClick={() => setSearchViewMode('list')} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-gray-100"><X size={20} /></button>
+            {searchQuery && (
+                <div className="space-y-4">
+                    <h3 className="font-bold text-secondary text-lg mb-4 px-1">Resultados da busca</h3>
+                    <div className="grid grid-cols-1 gap-3">
+                        {services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map(s => (
+                            <button key={s.id} onClick={() => handleStartRequest(s.name)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-primary/30 transition-all text-left flex justify-between items-center group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-gray-50 rounded-xl overflow-hidden"><img src={s.imageUrl} className="w-full h-full object-cover" /></div>
+                                    <span className="font-bold text-secondary text-sm">{s.name}</span>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white transition-colors">
+                                    <ArrowRight size={16} />
+                                </div>
+                            </button>
+                        ))}
+                        {services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                            <div className="text-center py-12 opacity-60">
+                                <p className="font-bold text-secondaryMuted">Nenhum serviço encontrado.</p>
+                            </div>
+                        )}
                     </div>
-                    <div className="flex-1"><MapInterface professionals={topPros} onSelectProfessional={handleViewProfile} /></div>
+                </div>
+            )}
+
+            {searchViewMode === 'map' && (
+                <div className="fixed inset-0 z-[150] bg-white animate-scale-in">
+                    <MapInterface 
+                        professionals={topPros} 
+                        onSelectProfessional={handleViewProfile} 
+                        onClose={() => setSearchViewMode('list')}
+                    />
                 </div>
             )}
         </div>
@@ -656,7 +942,7 @@ const App: React.FC = () => {
                 <MenuItem icon={<Trophy size={18}/>} label="Linka Club" onClick={() => setView('gamification')} color="text-yellow-600" bg="bg-yellow-50" />
                 <MenuItem icon={<Heart size={18}/>} label="Favoritos" onClick={() => setIsFavoritesModalOpen(true)} color="text-accent" bg="bg-red-50" />
                 <MenuItem icon={<ShieldCheck size={18}/>} label="Dicas de Segurança" onClick={() => setIsSecurityModalOpen(true)} color="text-blue-500" bg="bg-blue-50" />
-                <MenuItem icon={<HelpCircle size={18}/>} label="Ajuda e Suporte" onClick={() => addToast("Suporte em breve!", "info")} color="text-purple-500" bg="bg-purple-50" />
+                <MenuItem icon={<HelpCircle size={18}/>} label="Ajuda e Suporte" onClick={handleContactSupport} color="text-purple-500" bg="bg-purple-50" />
                 <button onClick={handleLogout} className="w-full flex items-center gap-4 p-5 hover:bg-red-50 transition-colors border-t border-gray-50 group">
                     <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors"><LogOut size={18} /></div>
                     <span className="font-bold text-sm text-secondary group-hover:text-red-500 transition-colors">Sair da Conta</span>

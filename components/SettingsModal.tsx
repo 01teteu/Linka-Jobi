@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
-import { X, Camera, Save, User as UserIcon, MapPin, Phone, HelpCircle, FileText, ChevronRight, LogOut, Loader2, UploadCloud } from 'lucide-react';
+import { X, Camera, Save, User as UserIcon, MapPin, Phone, HelpCircle, FileText, ChevronRight, LogOut, Loader2, UploadCloud, ShieldCheck } from 'lucide-react';
 import { Backend } from '../services/mockBackend';
 
 interface SettingsModalProps {
@@ -10,9 +10,11 @@ interface SettingsModalProps {
     user: User;
     onUpdateUser: (updatedData: Partial<User>) => Promise<void>;
     onLogout: () => void;
+    onSwitchToAdmin?: () => void;
+    onContactSupport?: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, onUpdateUser, onLogout }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, onUpdateUser, onLogout, onSwitchToAdmin, onContactSupport }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +74,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
     };
 
     const handleContactSupport = () => {
-        alert("Chamando suporte... (Simulação: Redirecionaria para WhatsApp ou Chat de Suporte)");
+        if (onContactSupport) {
+            onContactSupport();
+        } else {
+            alert("Suporte indisponível no momento.");
+        }
     };
 
     if (!isOpen) return null;
@@ -206,6 +212,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                     >
                         {isLoading ? <Loader2 className="animate-spin" /> : <><Save size={20} /> Salvar Alterações</>}
                     </button>
+
+                    {onSwitchToAdmin && (
+                        <button 
+                            onClick={() => { onSwitchToAdmin(); onClose(); }}
+                            className="w-full flex items-center justify-center gap-2 text-primary font-bold text-sm py-3 bg-primary/5 hover:bg-primary/10 rounded-xl transition-colors border border-primary/10"
+                        >
+                            <ShieldCheck size={16} /> Modo Admin (Demo)
+                        </button>
+                    )}
                     
                     <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 text-red-500 font-bold text-sm py-2 hover:bg-red-50 rounded-xl transition-colors">
                         <LogOut size={16} /> Sair da conta

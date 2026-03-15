@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Proposal, ProposalStatus, UserRole } from '../types';
-import { MapPin, CheckCircle2, X, MessageCircle, DollarSign, Clock, ArrowRight, Loader2 } from 'lucide-react';
+import { MapPin, CheckCircle2, X, MessageCircle, DollarSign, Clock, ArrowRight, Loader2, Star, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface ProposalCardProps {
   proposal: Proposal;
@@ -43,6 +43,15 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
       setAnimationState('idle');
   };
 
+  const getReputationLevel = (rating: number) => {
+      if (rating >= 4.8) return { color: 'bg-green-100 text-green-700 border-green-200', text: 'Excelente', icon: <ShieldCheck size={12} /> };
+      if (rating >= 4.0) return { color: 'bg-blue-100 text-blue-700 border-blue-200', text: 'Confiável', icon: <CheckCircle2 size={12} /> };
+      if (rating >= 3.0) return { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', text: 'Regular', icon: <Star size={12} /> };
+      return { color: 'bg-red-100 text-red-700 border-red-200', text: 'Atenção', icon: <AlertTriangle size={12} /> };
+  };
+
+  const reputation = getReputationLevel(proposal.contractorRating || 5.0);
+
   return (
     <>
       <div className="bg-white rounded-[1.5rem] p-5 border border-gray-100 shadow-card hover:shadow-float transition-all duration-300 mb-4 group relative overflow-hidden">
@@ -55,9 +64,18 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
                 </div>
                 <div>
                     <h3 className="font-bold text-sm text-secondary leading-tight">{proposal.contractorName.split(' ')[0]}</h3>
-                    <div className="flex items-center gap-1 text-[10px] text-secondaryMuted font-medium">
-                        <Clock size={10} /> 
-                        <span>Postado há 10 min</span>
+                    
+                    {/* Reputação do Cliente */}
+                    <div className="flex items-center gap-2 mt-1">
+                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${reputation.color}`}>
+                            {reputation.icon}
+                            <span>{reputation.text}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-yellow-500 font-bold">
+                            <Star size={10} fill="currentColor" />
+                            <span>{proposal.contractorRating?.toFixed(1) || '5.0'}</span>
+                            <span className="text-gray-400 font-medium">({proposal.contractorReviewsCount || 0})</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -148,6 +166,12 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
                             <div>
                                 <p className="text-[10px] font-bold text-secondaryMuted uppercase tracking-wide">Cliente</p>
                                 <h4 className="font-bold text-secondary text-sm">{proposal.contractorName}</h4>
+                                {/* Reputação no Modal */}
+                                <div className="flex items-center gap-1 text-[10px] text-yellow-500 font-bold mt-0.5">
+                                    <Star size={10} fill="currentColor" />
+                                    <span>{proposal.contractorRating?.toFixed(1) || '5.0'}</span>
+                                    <span className="text-gray-400">({proposal.contractorReviewsCount || 0} avaliações)</span>
+                                </div>
                             </div>
                         </div>
                         

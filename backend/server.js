@@ -328,8 +328,8 @@ fastify.post('/api/proposals/:id/accept', { preValidation: [fastify.authenticate
             );
             chatId = chatRes.rows[0].id;
             await pool.query(
-                `INSERT INTO chat_messages (session_id, sender_id, texto, is_system) VALUES ($1, $2, 'Negociação iniciada', true)`,
-                [chatId, 0]
+                `INSERT INTO chat_messages (session_id, sender_id, texto, is_system) VALUES ($1, NULL, 'Negociação iniciada', true)`,
+                [chatId]
             );
         }
 

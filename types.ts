@@ -15,6 +15,7 @@ export enum UserStatus {
 export enum ProposalStatus {
   OPEN = 'OPEN',
   NEGOTIATING = 'NEGOTIATING',
+  IN_PROGRESS = 'IN_PROGRESS',
   COMPLETED = 'COMPLETED'
 }
 
@@ -59,13 +60,17 @@ export interface ChatSession {
   id: number;
   proposalId: number;
   proposalTitle: string;
+  proposalDescription?: string;
+  proposalBudget?: string;
   contractorId: number;
   professionalId: number;
+  hiredProfessionalId?: number;
   proposalStatus: ProposalStatus;
   participants: { id: number; name: string; avatar: string }[];
   messages: Message[];
   lastMessage: string;
   unreadCount: number;
+  isSupport?: boolean;
 }
 
 export interface Appointment {
@@ -76,6 +81,7 @@ export interface Appointment {
   avatarUrl: string;
   date: string;
   time: string;
+  timestamp?: string; // ISO string for local time calculation
   status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
   location: string;
   isProposal?: boolean; 
@@ -108,6 +114,7 @@ export interface LevelData {
   nextLevelXp: number;
   benefits: string[];
   badges: Badge[];
+  capReason?: string;
 }
 
 export interface Review {
@@ -139,6 +146,14 @@ export interface Notification {
   actionLink?: string;
 }
 
+export interface ServiceItem {
+  id: string;
+  title: string;
+  description?: string;
+  price: string; // String to allow "A partir de R$ 100" or simple "100.00"
+  priceUnit?: 'FIXED' | 'HOURLY' | 'ESTIMATE';
+}
+
 export interface User {
   id: number;
   name: string;
@@ -157,6 +172,10 @@ export interface User {
   rating?: number;
   reviewsCount?: number;
   isSubscriber?: boolean;
+  isFavorite?: boolean;
+  portfolio?: PortfolioItem[];
+  services?: ServiceItem[];
+  coverUrl?: string;
 }
 
 export interface Proposal {
@@ -165,6 +184,8 @@ export interface Proposal {
   contractorName: string;
   contractorEmail?: string;
   contractorPhone?: string;
+  contractorRating?: number;
+  contractorReviewsCount?: number;
   professionalId?: number;
   targetProfessionalId?: number;
   title: string;

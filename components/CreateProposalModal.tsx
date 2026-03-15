@@ -19,6 +19,8 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
   const [catalog, setCatalog] = useState<ServiceSubItem[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCepLoading, setIsCepLoading] = useState(false);
+  const [cepError, setCepError] = useState('');
   const { addToast } = useToast();
   
   const [formData, setFormData] = useState({
@@ -27,7 +29,51 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
     areaTag: '',
     location: '',
     budgetRange: '',
+    cep: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: '',
   });
+
+  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value.length > 8) value = value.slice(0, 8);
+      
+      let formattedCep = value;
+      if (value.length > 5) {
+          formattedCep = value.replace(/^(\d{5})(\d)/, '$1-$2');
+      }
+      
+      setFormData(prev => ({ ...prev, cep: formattedCep }));
+      setCepError('');
+
+      if (value.length === 8) {
+          setIsCepLoading(true);
+          try {
+              const response = await fetch(`https://viacep.com.br/ws/${value}/json/`);
+              const data = await response.json();
+              if (data.erro) {
+                  setCepError('CEP não encontrado');
+              } else {
+                  setFormData(prev => ({
+                      ...prev,
+                      street: data.logradouro || '',
+                      neighborhood: data.bairro || '',
+                      city: data.localidade || '',
+                      state: data.uf || '',
+                      location: `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`
+                  }));
+              }
+          } catch (error) {
+              setCepError('Erro ao buscar CEP');
+          } finally {
+              setIsCepLoading(false);
+          }
+      }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -79,7 +125,7 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
         
         // Se sucesso:
         setStep(1);
-        setFormData({ title: '', description: '', areaTag: '', location: '', budgetRange: '' });
+        setFormData({ title: '', description: '', areaTag: '', location: '', budgetRange: '', cep: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' });
         onClose(); 
     } catch (error: any) {
         // Se erro, o modal permanece aberto
@@ -177,18 +223,64 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
         )}
 
         {step === 2 && (
-            <div className="space-y-8 animate-scale-in">
+            <div className="space-y-6 animate-scale-in">
                 <h2 className="text-4xl font-extrabold text-textMain leading-tight">Onde e <br/> <span className="text-primary">quanto?</span></h2>
                 <div className="space-y-4">
                     <div className="relative">
                         <MapPin className="absolute left-6 top-6 text-primary" size={20} />
                         <input 
-                            className="w-full bg-white border-2 border-gray-100 rounded-full p-6 pl-14 text-lg font-bold outline-none focus:border-primary"
-                            placeholder="Seu bairro ou CEP"
-                            value={formData.location}
-                            onChange={(e) => setFormData({...formData, location: e.target.value})}
+                            className={`w-full bg-white border-2 ${cepError ? 'border-red-500' : 'border-gray-100'} rounded-full p-6 pl-14 text-lg font-bold outline-none focus:border-primary`}
+                            placeholder="Digite seu CEP"
+                            value={formData.cep}
+                            onChange={handleCepChange}
+                            maxLength={9}
                         />
+                        {isCepLoading && <Loader2 className="absolute right-6 top-6 animate-spin text-primary" size={20} />}
                     </div>
+                    {cepError && <p className="text-red-500 text-sm font-bold px-4">{cepError}</p>}
+                    
+                    {formData.street && (
+                        <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 space-y-4 animate-fade-in-up">
+                            <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Detalhes do Endereço</p>
+                            <div className="space-y-3">
+                                <input 
+                                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-primary"
+                                    placeholder="Rua/Avenida"
+                                    value={formData.street}
+                                    onChange={(e) => setFormData({...formData, street: e.target.value, location: `${e.target.value}, ${formData.number ? formData.number + ', ' : ''}${formData.neighborhood}, ${formData.city} - ${formData.state}`})}
+                                />
+                                <div className="flex gap-3">
+                                    <input 
+                                        className="w-1/3 bg-white border border-gray-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-primary"
+                                        placeholder="Número"
+                                        value={formData.number}
+                                        onChange={(e) => setFormData({...formData, number: e.target.value, location: `${formData.street}, ${e.target.value}, ${formData.neighborhood}, ${formData.city} - ${formData.state}`})}
+                                    />
+                                    <input 
+                                        className="w-2/3 bg-white border border-gray-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-primary"
+                                        placeholder="Complemento (Opcional)"
+                                        value={formData.complement}
+                                        onChange={(e) => setFormData({...formData, complement: e.target.value})}
+                                    />
+                                </div>
+                                <div className="flex gap-3">
+                                    <input 
+                                        className="w-1/2 bg-white border border-gray-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-primary bg-gray-100"
+                                        placeholder="Bairro"
+                                        value={formData.neighborhood}
+                                        readOnly
+                                    />
+                                    <input 
+                                        className="w-1/2 bg-white border border-gray-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-primary bg-gray-100"
+                                        placeholder="Cidade/UF"
+                                        value={`${formData.city} - ${formData.state}`}
+                                        readOnly
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="relative">
                         <DollarSign className="absolute left-6 top-6 text-primary" size={20} />
                         <input 
@@ -203,7 +295,7 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
                     <button onClick={() => setStep(1)} className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
                         <ArrowRight className="rotate-180 text-textMuted" />
                     </button>
-                    <button onClick={() => setStep(3)} disabled={!formData.location} className="flex-1 bg-primary text-white h-16 rounded-full font-bold text-lg shadow-xl">Revisar</button>
+                    <button onClick={() => setStep(3)} disabled={!formData.cep || formData.cep.length < 9 || !formData.number} className="flex-1 bg-primary text-white h-16 rounded-full font-bold text-lg shadow-xl disabled:opacity-50">Revisar</button>
                 </div>
             </div>
         )}

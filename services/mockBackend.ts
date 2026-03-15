@@ -29,11 +29,6 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
             } 
         });
         
-        if (response.status === 401) { 
-            localStorage.removeItem('token'); 
-            throw new Error("Sessão expirada. Faça login novamente."); 
-        }
-        
         const contentType = response.headers.get("content-type");
         let data = null;
         if (contentType && contentType.includes("application/json")) {
@@ -42,6 +37,12 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
              const text = await response.text();
              if (!response.ok) throw new Error(text || 'Erro no servidor');
              return text;
+        }
+
+        if (response.status === 401) { 
+            localStorage.removeItem('token'); 
+            // Use the actual error from server if available (e.g. "Senha incorreta")
+            throw new Error(data?.error || "Sessão expirada. Faça login novamente."); 
         }
 
         if (!response.ok) throw new Error(data?.error || 'Erro no servidor');
@@ -98,11 +99,6 @@ export const Backend = {
         return res;
     },
 
-    forgotPassword: async (email: string) => {
-        // Rota placeholder no frontend, backend ainda não envia email real
-        return { success: true };
-    },
-
     updateUser: async (u: User) => {
         return await apiFetch(`/api/users/${u.id}`, { 
             method: 'PUT', 
@@ -110,9 +106,10 @@ export const Backend = {
         });
     },
 
-    uploadImage: async (file: File) => {
+    uploadImage: async (file: File, type: 'avatar' | 'portfolio' | 'cover' = 'portfolio') => {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('type', type);
         const res = await apiFetch('/api/upload', {
             method: 'POST',
             body: formData
@@ -160,12 +157,26 @@ export const Backend = {
         });
     },
 
+    cancelProposal: async (id: number) => {
+        return await apiFetch(`/api/proposals/${id}/cancel`, { method: 'POST' });
+    },
+
     acceptProposal: async (id: number, userId: number) => {
         return await apiFetch(`/api/proposals/${id}/accept`, { method: 'POST' });
     },
 
-    completeProposal: async (id: number) => {
-        return await apiFetch(`/api/proposals/${id}/complete`, { method: 'POST' });
+    hireProfessional: async (proposalId: number, professionalId: number) => {
+        return await apiFetch(`/api/proposals/${proposalId}/hire`, {
+            method: 'POST',
+            body: JSON.stringify({ professionalId })
+        });
+    },
+
+    completeProposal: async (id: number, professionalId?: number) => {
+        return await apiFetch(`/api/proposals/${id}/complete`, { 
+            method: 'POST',
+            body: JSON.stringify({ professionalId })
+        });
     },
 
     submitReview: async (proposalId: number, targetId: number, rating: number, comment: string) => {
@@ -202,8 +213,16 @@ export const Backend = {
         } catch { return TOP_PROFESSIONALS; }
     },
 
-    getPublicProfile: async (userId: number): Promise<{user: User, portfolio: PortfolioItem[], reviews: Review[]}> => {
+    getPublicProfile: async (userId: number): Promise<{user: User, portfolio: PortfolioItem[], reviews: Review[], services?: ServiceItem[]}> => {
         return await apiFetch(`/api/users/${userId}/public_profile`);
+    },
+
+    getProfessionalStats: async () => {
+        return await apiFetch('/api/professional/stats');
+    },
+
+    incrementProfileViews: async (userId: number) => {
+        return await apiFetch(`/api/users/${userId}/view`, { method: 'POST' });
     },
 
     getAdminStats: async (): Promise<AdminStats> => {
@@ -242,9 +261,68 @@ export const Backend = {
         return await apiFetch('/api/wallet');
     },
 
-    // Stubs (Funcionalidades de CRUD administrativo futuro)
-    saveCategory: async (c: any) => ({ success: true }),
-    deleteCategory: async (id: string) => ({ success: true }),
-    saveService: async (s: any) => ({ success: true }),
-    deleteService: async (id: string) => ({ success: true }),
+    getFavorites: async () => {
+        return await apiFetch('/api/favorites');
+    },
+
+    toggleFavorite: async (professionalId: number) => {
+        return await apiFetch('/api/favorites', {
+            method: 'POST',
+            body: JSON.stringify({ professionalId })
+        });
+    },
+
+    // Denúncias e Bloqueios
+    reportUser: async (reportedId: number, reason: string, description?: string) => {
+        return await apiFetch('/api/reports', {
+            method: 'POST',
+            body: JSON.stringify({ reportedId, reason, description })
+        });
+    },
+
+    blockUser: async (userId: number) => {
+        return await apiFetch(`/api/users/${userId}/block`, { method: 'POST' });
+    },
+
+    unblockUser: async (userId: number) => {
+        return await apiFetch(`/api/users/${userId}/block`, { method: 'DELETE' });
+    },
+
+    getBlockedUsers: async () => {
+        return await apiFetch('/api/users/blocked');
+    },
+
+    getReports: async () => {
+        return await apiFetch('/api/admin/reports');
+    },
+
+    promoteToAdmin: async () => {
+        return await apiFetch('/api/admin/demo-promote', { method: 'POST' });
+    },
+
+    contactSupport: async () => {
+        return await apiFetch('/api/support/contact', { method: 'POST' });
+    },
+
+    // Admin CRUD
+    saveCategory: async (c: any) => {
+        if (c.isNew) {
+            return await apiFetch('/api/admin/categories', { method: 'POST', body: JSON.stringify(c) });
+        } else {
+            return await apiFetch(`/api/admin/categories/${c.id}`, { method: 'PUT', body: JSON.stringify(c) });
+        }
+    },
+    deleteCategory: async (id: string) => {
+        return await apiFetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+    },
+    saveService: async (s: any) => {
+        if (s.isNew) {
+            return await apiFetch('/api/admin/services', { method: 'POST', body: JSON.stringify(s) });
+        } else {
+            return await apiFetch(`/api/admin/services/${s.id}`, { method: 'PUT', body: JSON.stringify(s) });
+        }
+    },
+    deleteService: async (id: string) => {
+        return await apiFetch(`/api/admin/services/${id}`, { method: 'DELETE' });
+    },
 };

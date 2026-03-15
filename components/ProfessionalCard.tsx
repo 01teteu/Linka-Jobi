@@ -15,7 +15,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional, onVie
         <Star size={8} fill="currentColor" /> {professional.rating || '5.0'}
       </div>
 
-      <div className="relative mb-3">
+      <div className="relative mb-3 cursor-pointer" onClick={onViewProfile}>
         <div className="w-16 h-16 rounded-full p-1 border-2 border-primaryContainer group-hover:scale-110 transition-transform overflow-hidden bg-white">
             <img src={professional.avatarUrl} className="w-full h-full rounded-full object-cover" alt="Pro" />
         </div>

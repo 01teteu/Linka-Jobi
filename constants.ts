@@ -63,8 +63,8 @@ export const DEFAULT_SERVICES: ServiceSubItem[] = [
   // --- TECNOLOGIA ---
   { id: 'serv_dev', name: 'Desenvolvedor Web/App', emoji: '💻', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_support', name: 'Suporte Técnico', emoji: '🛠️', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_design', name: 'Designer Gráfico', emoji: '🎨', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1626785774573-4b799314346d?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_video', name: 'Editor de Vídeo', emoji: '🎬', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1574717436423-a75a6802577b?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_design', name: 'Designer Gráfico', emoji: '🎨', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_video', name: 'Editor de Vídeo', emoji: '🎬', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_marketing', name: 'Gestor de Tráfego', emoji: '📈', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_network', name: 'Redes de Computadores', emoji: '🌐', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_security', name: 'Segurança Digital', emoji: '🔒', categoryId: 'cat_tech', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?q=80&w=400&auto=format&fit=crop' },
@@ -82,17 +82,17 @@ export const DEFAULT_SERVICES: ServiceSubItem[] = [
   { id: 'serv_personal', name: 'Personal Trainer', emoji: '💪', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_psy', name: 'Psicólogo', emoji: '🧠', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_nutrition', name: 'Nutricionista', emoji: '🥗', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_yoga', name: 'Instrutor de Yoga', emoji: '🧘', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1544367563-12123d8965cd?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_yoga', name: 'Instrutor de Yoga', emoji: '🧘', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_care', name: 'Cuidador de Idosos', emoji: '👵', categoryId: 'cat_health', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?q=80&w=400&auto=format&fit=crop' },
 
   // --- EDUCAÇÃO ---
   { id: 'serv_english', name: 'Professor de Inglês', emoji: '🇺🇸', categoryId: 'cat_education', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_math', name: 'Reforço Escolar', emoji: '📚', categoryId: 'cat_education', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_music', name: 'Aulas de Música', emoji: '🎵', categoryId: 'cat_education', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1514320291940-7cea59dc6a00?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_music', name: 'Aulas de Música', emoji: '🎵', categoryId: 'cat_education', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=400&auto=format&fit=crop' },
 
   // --- EVENTOS ---
   { id: 'serv_photo', name: 'Fotógrafo', emoji: '📸', categoryId: 'cat_events', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_dj', name: 'DJ e Som', emoji: '🎧', categoryId: 'cat_events', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1516280440614-6697288d5d38?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_dj', name: 'DJ e Som', emoji: '🎧', categoryId: 'cat_events', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_buffet', name: 'Buffet / Churrasqueiro', emoji: '🍖', categoryId: 'cat_events', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=400&auto=format&fit=crop' },
 
   // --- NEGÓCIOS ---
@@ -101,14 +101,14 @@ export const DEFAULT_SERVICES: ServiceSubItem[] = [
   { id: 'serv_trans', name: 'Tradutor', emoji: '🗣️', categoryId: 'cat_business', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?q=80&w=400&auto=format&fit=crop' },
 
   // --- BELEZA ---
-  { id: 'serv_makeup', name: 'Maquiadora', emoji: '💄', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1487412947132-232a8408a360?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_makeup', name: 'Maquiadora', emoji: '💄', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1522337660859-02fbefca4702?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_hair', name: 'Cabeleireiro(a)', emoji: '💇', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1560869713-7d0a29430803?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_manicure', name: 'Manicure/Pedicure', emoji: '💅', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_barber', name: 'Barbeiro', emoji: '💈', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1503951914875-befbb6491842?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_barber', name: 'Barbeiro', emoji: '💈', categoryId: 'cat_beauty', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?q=80&w=400&auto=format&fit=crop' },
 
   // --- AUTOMOTIVO ---
-  { id: 'serv_mech', name: 'Mecânico', emoji: '🔧', categoryId: 'cat_auto', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1487754180477-9b832f22595b?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_wash', name: 'Lavagem Ecológica', emoji: '🚿', categoryId: 'cat_auto', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1520340356584-7c994887e9f0?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_mech', name: 'Mecânico', emoji: '🔧', categoryId: 'cat_auto', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_wash', name: 'Lavagem Ecológica', emoji: '🚿', categoryId: 'cat_auto', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_repair_small', name: 'Pequenos Reparos (Martelinho)', emoji: '🔨', categoryId: 'cat_auto', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?q=80&w=400&auto=format&fit=crop' },
 
   // --- ECONOMIA CRIATIVA ---
@@ -119,12 +119,12 @@ export const DEFAULT_SERVICES: ServiceSubItem[] = [
   // --- SERVIÇOS COMUNITÁRIOS ---
   { id: 'serv_pet', name: 'Passeador de Cães (Dog Walker)', emoji: '🐕', categoryId: 'cat_community', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_delivery', name: 'Entregas Locais', emoji: '📦', categoryId: 'cat_community', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1616401784845-180882ba9ba8?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_cooking', name: 'Cozinheira(o) a Domicílio', emoji: '🍳', categoryId: 'cat_community', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=400&auto=format&fit=crop' },
+  { id: 'serv_cooking', name: 'Cozinheira(o) a Domicílio', emoji: '🍳', categoryId: 'cat_community', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1556909212-d5b604d0c90d?q=80&w=400&auto=format&fit=crop' },
 
   // --- SUSTENTABILIDADE ---
   { id: 'serv_solar', name: 'Manutenção Solar', emoji: '☀️', categoryId: 'cat_sustain', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?q=80&w=400&auto=format&fit=crop' },
   { id: 'serv_recycle', name: 'Coleta Seletiva / Descarte', emoji: '♻️', categoryId: 'cat_sustain', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?q=80&w=400&auto=format&fit=crop' },
-  { id: 'serv_repair_elect', name: 'Reparo de Eletrodomésticos', emoji: '🔌', categoryId: 'cat_sustain', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1581092921461-eab62e97a782?q=80&w=400&auto=format&fit=crop' }
+  { id: 'serv_repair_elect', name: 'Reparo de Eletrodomésticos', emoji: '🔌', categoryId: 'cat_sustain', isActive: true, imageUrl: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=400&auto=format&fit=crop' }
 ];
 
 export const MOCK_CONTRACTOR: User = {

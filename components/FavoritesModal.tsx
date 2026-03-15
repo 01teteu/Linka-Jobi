@@ -10,9 +10,10 @@ interface FavoritesModalProps {
   isSubscriber: boolean;
   onRemove: (proId: number) => void;
   onOpenSubscription: () => void;
+  onViewProfile?: (pro: User) => void;
 }
 
-const FavoritesModal: React.FC<FavoritesModalProps> = ({ isOpen, onClose, favorites, isSubscriber, onRemove, onOpenSubscription }) => {
+const FavoritesModal: React.FC<FavoritesModalProps> = ({ isOpen, onClose, favorites, isSubscriber, onRemove, onOpenSubscription, onViewProfile }) => {
   if (!isOpen) return null;
 
   return (
@@ -94,7 +95,10 @@ const FavoritesModal: React.FC<FavoritesModalProps> = ({ isOpen, onClose, favori
                                         <Trash2 size={14} />
                                     </button>
                                     <button 
-                                        onClick={() => isLocked ? onOpenSubscription() : alert('Abrindo perfil...')}
+                                        onClick={() => {
+                                            if (isLocked) onOpenSubscription();
+                                            else if (onViewProfile) onViewProfile(pro);
+                                        }}
                                         className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isLocked ? 'bg-amber-100 text-amber-600' : 'bg-primaryContainer text-primary hover:bg-primary hover:text-white'}`}
                                     >
                                         {isLocked ? <Lock size={14}/> : <ArrowRight size={16} />}

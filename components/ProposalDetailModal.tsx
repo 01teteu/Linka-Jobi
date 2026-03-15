@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Proposal, ProposalStatus } from '../types';
 import { X, MapPin, DollarSign, Calendar, Clock, CheckCircle2, Circle, ArrowRight, FileText, AlertCircle, MessageCircle } from 'lucide-react';
 
@@ -7,9 +7,19 @@ interface ProposalDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
     proposal: Proposal | null;
+    onCancel?: (id: number) => void;
+    currentUserId?: number;
 }
 
-const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClose, proposal }) => {
+const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClose, proposal, onCancel, currentUserId }) => {
+    const [isConfirmingCancel, setIsConfirmingCancel] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setIsConfirmingCancel(false);
+        }
+    }, [isOpen]);
+
     if (!isOpen || !proposal) return null;
 
     // Definição visual baseada no status
@@ -169,10 +179,36 @@ const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClo
 
                 {/* Footer Actions */}
                 <div className="p-6 bg-white border-t border-gray-100 flex gap-3">
-                    {proposal.status === ProposalStatus.OPEN ? (
-                        <button className="w-full py-4 rounded-2xl font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors flex items-center justify-center gap-2">
-                            <AlertCircle size={18} /> Cancelar Pedido
-                        </button>
+                    {proposal.status === ProposalStatus.OPEN && proposal.contractorId === currentUserId ? (
+                        isConfirmingCancel ? (
+                            <div className="w-full flex flex-col gap-2">
+                                <p className="text-sm text-center font-bold text-red-500 mb-2">Tem certeza que deseja cancelar?</p>
+                                <div className="flex gap-3">
+                                    <button 
+                                        onClick={() => setIsConfirmingCancel(false)}
+                                        className="flex-1 py-3 rounded-2xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center"
+                                    >
+                                        Voltar
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setIsConfirmingCancel(false);
+                                            if (onCancel) onCancel(proposal.id);
+                                        }}
+                                        className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors flex items-center justify-center shadow-lg shadow-red-500/20"
+                                    >
+                                        Sim, Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => setIsConfirmingCancel(true)}
+                                className="w-full py-4 rounded-2xl font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <AlertCircle size={18} /> Cancelar Pedido
+                            </button>
+                        )
                     ) : (
                         <button 
                             className="w-full py-4 rounded-2xl font-bold text-white bg-primary hover:bg-primaryDark transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20"

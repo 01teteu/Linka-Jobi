@@ -67,7 +67,7 @@ CREATE TABLE propostas (
     titulo VARCHAR(150) NOT NULL,
     descricao TEXT NOT NULL,
     area_tag VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'NEGOTIATING', 'COMPLETED')),
+    status VARCHAR(20) DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'NEGOTIATING', 'IN_PROGRESS', 'COMPLETED')),
     localizacao VARCHAR(100),
     orcamento_estimado VARCHAR(100),
     latitude FLOAT,

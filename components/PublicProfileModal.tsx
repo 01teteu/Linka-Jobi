@@ -1,20 +1,27 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, PortfolioItem, Review } from '../types';
+import { User, PortfolioItem, Review, ServiceItem } from '../types';
 import { Backend } from '../services/mockBackend';
-import { X, MapPin, Star, ShieldCheck, Clock, Award, Briefcase, Grid, MessageSquare, ChevronRight, CheckCircle2, Loader2, ImageOff } from 'lucide-react';
+import { X, MapPin, Star, ShieldCheck, Clock, Award, Briefcase, Grid, MessageSquare, ChevronRight, CheckCircle2, Loader2, ImageOff, DollarSign, Tag, Heart, Flag, Ban, AlertTriangle } from 'lucide-react';
+import { useToast } from './ToastContext';
 
 interface PublicProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   professional: User | null;
   onRequestQuote: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (id: number) => void;
 }
 
-const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose, professional, onRequestQuote }) => {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'reviews'>('portfolio');
+const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose, professional, onRequestQuote, isFavorite, onToggleFavorite }) => {
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'services' | 'reviews'>('portfolio');
   const [loading, setLoading] = useState(true);
-  const [fullProfile, setFullProfile] = useState<{ user: User, portfolio: PortfolioItem[], reviews: Review[] } | null>(null);
+  const [fullProfile, setFullProfile] = useState<{ user: User, portfolio: PortfolioItem[], reviews: Review[], services?: ServiceItem[] } | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (isOpen && professional) {
@@ -28,11 +35,38 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
     }
   }, [isOpen, professional]);
 
+  const handleReport = async () => {
+      if (!professional || !reportReason) return;
+      try {
+          await Backend.reportUser(professional.id, reportReason, reportDescription);
+          showToast('Denúncia enviada com sucesso.', 'success');
+          setShowReportModal(false);
+          setReportReason('');
+          setReportDescription('');
+      } catch (error) {
+          showToast('Erro ao enviar denúncia.', 'error');
+      }
+  };
+
+  const handleBlock = async () => {
+      if (!professional) return;
+      if (confirm('Tem certeza que deseja bloquear este usuário? Você não verá mais mensagens dele.')) {
+          try {
+              await Backend.blockUser(professional.id);
+              showToast('Usuário bloqueado.', 'success');
+              onClose();
+          } catch (error) {
+              showToast('Erro ao bloquear usuário.', 'error');
+          }
+      }
+  };
+
   if (!isOpen || !professional) return null;
 
   const displayUser = fullProfile?.user || professional;
   const portfolio = fullProfile?.portfolio || [];
   const reviews = fullProfile?.reviews || [];
+  const services = displayUser.services || [];
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-md animate-fade-in-up">
@@ -46,6 +80,33 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
             <X size={20} />
         </button>
 
+        {/* Actions: Favorite, Report, Block */}
+        <div className="absolute top-4 right-16 z-20 flex gap-2">
+            {onToggleFavorite && (
+                <button 
+                    onClick={() => onToggleFavorite(professional.id)}
+                    className={`w-10 h-10 backdrop-blur-md rounded-full flex items-center justify-center transition-all ${isFavorite ? 'bg-white text-red-500 shadow-md' : 'bg-black/20 text-white hover:bg-black/30'}`}
+                    title="Favoritar"
+                >
+                    <Heart size={20} className={isFavorite ? 'fill-current' : ''} />
+                </button>
+            )}
+            <button 
+                onClick={() => setShowReportModal(true)}
+                className="w-10 h-10 bg-black/20 hover:bg-black/30 backdrop-blur-md rounded-full flex items-center justify-center text-white transition-all"
+                title="Denunciar"
+            >
+                <Flag size={18} />
+            </button>
+            <button 
+                onClick={handleBlock}
+                className="w-10 h-10 bg-black/20 hover:bg-red-600/80 backdrop-blur-md rounded-full flex items-center justify-center text-white transition-all"
+                title="Bloquear"
+            >
+                <Ban size={18} />
+            </button>
+        </div>
+
         {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center">
                 <Loader2 className="w-10 h-10 text-primary animate-spin mb-2" />
@@ -56,7 +117,7 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
             {/* Header Image & Avatar */}
             <div className="relative h-40 bg-gray-200 shrink-0">
                 <img 
-                    src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=800&auto=format&fit=crop" 
+                    src={displayUser.coverUrl || "https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=800&auto=format&fit=crop"}
                     className="w-full h-full object-cover opacity-80"
                     alt="Capa"
                 />
@@ -131,6 +192,13 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
                         {activeTab === 'portfolio' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-t-full"></div>}
                     </button>
                     <button 
+                        onClick={() => setActiveTab('services')}
+                        className={`pb-3 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'services' ? 'text-primary' : 'text-textMuted hover:text-textMain'}`}
+                    >
+                        <div className="flex items-center gap-2"><Tag size={16} /> Serviços</div>
+                        {activeTab === 'services' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-t-full"></div>}
+                    </button>
+                    <button 
                         onClick={() => setActiveTab('reviews')}
                         className={`pb-3 text-sm font-bold uppercase tracking-wider transition-all relative ${activeTab === 'reviews' ? 'text-primary' : 'text-textMuted hover:text-textMain'}`}
                     >
@@ -159,6 +227,31 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
                                 <p className="text-sm font-bold text-textMuted">Nenhuma foto ainda.</p>
                             </div>
                         )
+                    ) : activeTab === 'services' ? (
+                        <div className="space-y-3">
+                            {services.length > 0 ? services.map((service) => (
+                                <div key={service.id} className="bg-white border border-gray-100 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                                    <div>
+                                        <h4 className="font-bold text-secondary text-sm">{service.title}</h4>
+                                        {service.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{service.description}</p>}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className="bg-green-50 text-green-700 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
+                                                <DollarSign size={10} /> 
+                                                {service.price} 
+                                                <span className="opacity-70 font-medium ml-0.5">
+                                                    {service.priceUnit === 'HOURLY' ? '/hora' : service.priceUnit === 'ESTIMATE' ? '(estimado)' : ''}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="text-center py-8 opacity-50">
+                                    <Tag className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                                    <p className="text-sm font-bold text-textMuted">Nenhum serviço listado.</p>
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             {reviews.length > 0 ? reviews.map((review) => (
@@ -200,6 +293,56 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ isOpen, onClose
                 Solicitar Orçamento <ChevronRight size={24} />
             </button>
         </div>
+
+        {/* Report Modal Overlay */}
+        {showReportModal && (
+            <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+                <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-scale-in">
+                    <div className="flex items-center gap-2 text-red-500 mb-4">
+                        <AlertTriangle size={24} />
+                        <h3 className="font-black text-lg">Denunciar Usuário</h3>
+                    </div>
+                    <p className="text-sm text-textMuted mb-4">Sua denúncia é anônima e será analisada pela nossa equipe.</p>
+                    
+                    <div className="space-y-3">
+                        <select 
+                            value={reportReason}
+                            onChange={(e) => setReportReason(e.target.value)}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-red-200 outline-none"
+                        >
+                            <option value="">Selecione o motivo...</option>
+                            <option value="SPAM">Spam ou Propaganda</option>
+                            <option value="OFFENSIVE">Conteúdo Ofensivo</option>
+                            <option value="FRAUD">Suspeita de Fraude/Golpe</option>
+                            <option value="FAKE">Perfil Falso</option>
+                            <option value="OTHER">Outro</option>
+                        </select>
+                        <textarea 
+                            value={reportDescription}
+                            onChange={(e) => setReportDescription(e.target.value)}
+                            placeholder="Descreva o ocorrido (opcional)..."
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-red-200 outline-none h-24 resize-none"
+                        />
+                    </div>
+
+                    <div className="flex gap-3 mt-6">
+                        <button 
+                            onClick={() => setShowReportModal(false)}
+                            className="flex-1 py-3 bg-gray-100 text-textMuted font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            onClick={handleReport}
+                            disabled={!reportReason}
+                            className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Enviar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
       </div>
     </div>

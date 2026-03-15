@@ -5,24 +5,16 @@ Este documento detalha o estado atual do projeto e o que é necessário para con
 ## 1. Infraestrutura & Banco de Dados
 - [x] **Estrutura do Banco:** Tabelas criadas (`users`, `propostas`, `chat`, etc.) e relacionamentos definidos.
 - [x] **Dados Iniciais:** Seeds de categorias e serviços implementados.
-- [!] **Conexão:** O sistema possui um "Mock Mode" de fallback. Para produção, a variável `DATABASE_URL` **deve** estar configurada e o banco acessível.
-  - *Status:* Funcional (com fallback), mas requer banco real para persistência definitiva.
+- [x] **Conexão:** O sistema está conectado ao Supabase via `DATABASE_URL`. O "Mock Mode" não está mais sendo usado como principal.
 
-## 2. Integrações Externas (Requer Configuração)
-Para que todas as funcionalidades operem corretamente, as seguintes variáveis de ambiente são obrigatórias:
+## 2. Integrações Externas (Status Atual)
+A maioria das integrações já está configurada no arquivo `.env`:
 
-- [ ] **Upload de Imagens (Cloudinary):**
-  - `CLOUDINARY_CLOUD_NAME`
-  - `CLOUDINARY_API_KEY`
-  - `CLOUDINARY_API_SECRET`
-  - *Sem isso:* O sistema usa imagens de placeholder estáticas.
-
-- [ ] **Inteligência Artificial (Gemini):**
-  - `GOOGLE_API_KEY`
-  - *Sem isso:* A funcionalidade "Melhorar com IA" retorna o texto original.
-
-- [ ] **Geolocalização (BrasilAPI):**
-  - *Status:* Já implementado e não requer chave de API. Funciona nativamente.
+- [x] **Banco de Dados (Supabase):** Configurado e operante (`DATABASE_URL`).
+- [x] **Upload de Imagens (Cloudinary):** Configurado (`CLOUDINARY_*`). O sistema já faz upload real de arquivos.
+- [x] **Inteligência Artificial (Gemini):** Configurado (`VITE_GOOGLE_API_KEY`). A melhoria de textos com IA está ativa.
+- [x] **Geolocalização (BrasilAPI):** Nativo e funcional.
+- [ ] **Serviço de E-mail (SMTP):** *Pendente.* As variáveis `SMTP_USER` e `SMTP_PASS` estão comentadas no `.env`. Atualmente usa Ethereal (simulado) para notificações.
 
 ## 3. Funcionalidades Core (Status Atual)
 
@@ -40,8 +32,8 @@ Para que todas as funcionalidades operem corretamente, as seguintes variáveis d
 Estas funcionalidades existem no sistema mas operam em modo "simulado" ou simplificado, o que é comum para MVPs, mas deve ser observado:
 
 - **Recuperação de Senha:**
-  - *Atual:* Gera o token mas apenas exibe no log do servidor (não envia e-mail).
-  - *Para 100%:* Integrar com SendGrid, Resend ou AWS SES.
+  - *Atual:* Removido do MVP para simplificação.
+  - *Para o Futuro:* Integrar com SendGrid, Resend ou AWS SES na próxima versão.
 
 - **Pagamentos & Carteira:**
   - *Atual:* O saldo é virtual. Ao concluir um serviço, o valor é creditado na tabela `transactions` e no saldo do usuário, mas **nenhum dinheiro real é movimentado**.
@@ -49,12 +41,15 @@ Estas funcionalidades existem no sistema mas operam em modo "simulado" ou simpli
 
 ## 5. Próximos Passos Recomendados
 
-1. **Configurar `.env`:** Preencher as chaves do Cloudinary e Google AI.
-2. **Teste de Fluxo Completo:**
+1. **Teste de Fluxo Completo (Ponta a Ponta):**
    - Criar Usuário A (Cliente).
    - Criar Usuário B (Profissional).
    - A cria pedido -> B aceita -> Troca de mensagens -> A finaliza -> A avalia B.
-3. **Deploy:** O projeto já está configurado para deploy (Docker/Node), bastando apontar o banco de dados.
+2. **Testar Upload de Imagens:**
+   - Fazer upload de avatar e imagens de portfólio para confirmar a integração com o Cloudinary.
+3. **Testar IA:**
+   - Criar um pedido e usar o botão "Melhorar com IA" para validar o Gemini.
+4. **Deploy:** O projeto já está configurado para deploy, com banco e APIs conectadas.
 
 ---
 **Conclusão:** O algoritmo "real" está implementado. O projeto é funcional para uso como MVP demonstrativo. Para virar um produto comercial, faltaria apenas a integração bancária (Gateway de Pagamento) e serviço de E-mail transacional.
