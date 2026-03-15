@@ -158,20 +158,17 @@ const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClo
                     </div>
 
                     {/* Profissional Selecionado (Se houver) */}
-                    {proposal.status !== ProposalStatus.OPEN && (
+                    {proposal.status !== ProposalStatus.OPEN && proposal.professionalId && (
                         <div>
                             <h3 className="text-sm font-black text-textMain mb-3 uppercase tracking-wide">Profissional Responsável</h3>
                             <div className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-white shadow-sm">
-                                <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden">
-                                     <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150" className="w-full h-full object-cover" />
+                                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                                     P
                                 </div>
                                 <div>
-                                    <p className="font-bold text-textMain">João Silva</p>
-                                    <p className="text-xs text-textMuted">Aceitou o serviço</p>
+                                    <p className="font-bold text-textMain">Profissional Contratado</p>
+                                    <p className="text-xs text-textMuted">Responsável pelo serviço</p>
                                 </div>
-                                <button className="ml-auto bg-primary text-white p-2 rounded-xl">
-                                    <MessageCircle size={18} />
-                                </button>
                             </div>
                         </div>
                     )}
