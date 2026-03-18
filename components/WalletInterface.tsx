@@ -52,7 +52,7 @@ const WalletInterface: React.FC<WalletInterfaceProps> = ({ user, onBack }) => {
     };
 
     return (
-        <div className="max-w-xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
+        <div className="w-full px-6 py-8 pb-32 animate-fade-in-up">
             <header className="flex items-center gap-4 mb-8">
                 <button onClick={onBack} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
                     <ChevronLeft size={20} className="text-textMain" />

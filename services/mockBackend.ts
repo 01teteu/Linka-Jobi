@@ -191,6 +191,21 @@ export const Backend = {
         return await apiFetch('/api/chats');
     },
 
+    proposePrice: async (chatId: number, price: number) => {
+        return await apiFetch(`/api/chats/${chatId}/negotiate`, {
+            method: 'POST',
+            body: JSON.stringify({ price })
+        });
+    },
+
+    acceptPrice: async (chatId: number) => {
+        return await apiFetch(`/api/chats/${chatId}/negotiate/accept`, { method: 'POST' });
+    },
+
+    rejectPrice: async (chatId: number) => {
+        return await apiFetch(`/api/chats/${chatId}/negotiate/reject`, { method: 'POST' });
+    },
+
     sendMessage: async (chatId: number, senderId: number, text: string, type: string = 'text', metadata?: any) => {
         return await apiFetch('/api/messages', { 
             method: 'POST', 
@@ -294,10 +309,6 @@ export const Backend = {
 
     getReports: async () => {
         return await apiFetch('/api/admin/reports');
-    },
-
-    promoteToAdmin: async () => {
-        return await apiFetch('/api/admin/demo-promote', { method: 'POST' });
     },
 
     contactSupport: async () => {

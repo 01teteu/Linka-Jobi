@@ -455,20 +455,6 @@ const App: React.FC = () => {
       Backend.incrementProfileViews(pro.id).catch(() => {});
   };
   
-  const handleSwitchToAdmin = async () => {
-      if (!user) return;
-      try {
-          await Backend.promoteToAdmin();
-          const adminUser: User = { ...user, role: UserRole.ADMIN };
-          setUser(adminUser);
-          setView('admin');
-          addToast("Modo Admin ativado (Demo)", "success");
-      } catch (e) {
-          console.error(e);
-          addToast("Erro ao ativar modo admin", "error");
-      }
-  };
-
   const handleContactSupport = async () => {
       try {
           const res = await Backend.contactSupport();
@@ -485,75 +471,87 @@ const App: React.FC = () => {
 
   if (isAppLoading) {
       return (
-          <div className="min-h-screen bg-primary flex flex-col items-center justify-center animate-fade-in-up">
+        <div className="min-h-[100dvh] bg-gray-100 flex justify-center sm:py-8 text-secondary font-sans selection:bg-primary/20">
+          <div className="w-full max-w-md bg-primary sm:rounded-[2.5rem] sm:h-[850px] sm:shadow-2xl relative overflow-hidden flex flex-col items-center justify-center animate-fade-in-up">
               <ShieldCheck className="text-white w-20 h-20 animate-bounce-soft mb-4" />
               <h1 className="text-4xl font-extrabold text-white mb-2">Linka Jobi</h1>
               <Loader2 className="text-white/70 animate-spin mt-4" size={32} />
           </div>
+        </div>
       );
   }
 
-  if (user.id === 0) return <AuthScreens onLogin={handleLoginSuccess} />;
+  if (user.id === 0) {
+      return (
+        <div className="min-h-[100dvh] bg-gray-100 flex justify-center sm:py-8 text-secondary font-sans selection:bg-primary/20">
+          <div className="w-full max-w-md bg-background sm:rounded-[2.5rem] sm:h-[850px] sm:shadow-2xl relative overflow-hidden flex flex-col flex-1 sm:flex-none">
+            <AuthScreens onLogin={handleLoginSuccess} />
+          </div>
+        </div>
+      );
+  }
 
   const isAdminView = user.role === UserRole.ADMIN && view === 'admin';
 
   return (
-    <div className="min-h-screen bg-background text-secondary font-sans selection:bg-primary/20">
-      <main className={`${isAdminView ? "h-screen overflow-hidden" : "pb-28"}`}>
-        {view === 'admin' && <AdminDashboard user={user} onExit={() => setView('feed')} />}
-        {view === 'feed' && renderFeed()}
-        {view === 'search' && renderSearch()} 
-        {view === 'dashboard' && <ProfessionalDashboard stats={professionalStats} user={user} onUpdateUser={handleUpdateUser} />} 
-        {view === 'calendar' && <CalendarInterface user={user} onViewProposal={handleViewProposalFromCalendar} />}
-        {view === 'gamification' && <GamificationHub user={user} onBack={() => setView('profile')} />} 
-        {view === 'chats' && <ChatInterface user={user} chats={chats} initialChatId={targetChatId} onRefresh={refreshChats} onComplete={handleCompleteJob} onHire={handleHireProfessional} onReview={handleReview} onViewProfile={handleViewProfile} />}
-        {view === 'profile' && renderProfile()} 
-      </main>
+    <div className="min-h-[100dvh] bg-gray-100 flex justify-center sm:py-8 text-secondary font-sans selection:bg-primary/20">
+      <div className="w-full max-w-md bg-background sm:rounded-[2.5rem] sm:h-[850px] sm:shadow-2xl relative overflow-hidden flex flex-col">
+        <main className={`flex-1 overflow-y-auto no-scrollbar ${isAdminView ? "" : "pb-24"}`}>
+          {view === 'admin' && <AdminDashboard user={user} onExit={() => setView('feed')} />}
+          {view === 'feed' && renderFeed()}
+          {view === 'search' && renderSearch()} 
+          {view === 'dashboard' && <ProfessionalDashboard stats={professionalStats} user={user} onUpdateUser={handleUpdateUser} />} 
+          {view === 'calendar' && <CalendarInterface user={user} onViewProposal={handleViewProposalFromCalendar} />}
+          {view === 'gamification' && <GamificationHub user={user} onBack={() => setView('profile')} />} 
+          {view === 'chats' && <ChatInterface user={user} chats={chats} initialChatId={targetChatId} onRefresh={refreshChats} onComplete={handleCompleteJob} onHire={handleHireProfessional} onReview={handleReview} onViewProfile={handleViewProfile} />}
+          {view === 'profile' && renderProfile()} 
+        </main>
 
-      {!isAdminView && !isPortfolioIncomplete && (
-          <div className="fixed bottom-0 left-0 right-0 glass px-6 pb-6 pt-4 z-[100] border-t border-white/50">
-            <div className="flex items-center justify-around max-w-lg mx-auto">
-              <NavBtn active={view === 'feed'} onClick={() => setView('feed')} icon={<Home />} label="Home" />
-              <NavBtn active={view === (user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} onClick={() => setView(user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} icon={user.role === UserRole.CONTRACTOR ? <LayoutGrid /> : <PieChart />} label={user.role === UserRole.CONTRACTOR ? 'Busca' : 'Gestão'} />
-              
-              {/* Central Action Button */}
-              {user.role === UserRole.CONTRACTOR ? (
-                <button onClick={() => { setModalInitialCategory(null); setDirectHireProfessional(null); setModalOpen(true); }} className="relative -top-8 bg-primary hover:bg-primaryDark text-white w-14 h-14 rounded-full shadow-glow flex items-center justify-center transition-all hover:scale-110 active:scale-95">
-                   <Plus size={28} strokeWidth={2.5} />
-                </button>
-              ) : (
-                <NavBtn active={view === 'calendar'} onClick={() => setView('calendar')} icon={<Calendar />} label="Agenda" />
-              )}
-              
-              <NavBtn active={view === 'chats'} onClick={() => setView('chats')} icon={<MessageCircle />} label="Chat" notification={chats.some(c => c.unreadCount > 0)} />
-              <NavBtn active={view === 'profile'} onClick={() => setView('profile')} icon={<UserIcon />} label="Perfil" />
+        {!isAdminView && !isPortfolioIncomplete && (
+            <div className="absolute bottom-0 left-0 right-0 glass px-6 pb-8 pt-4 z-[100] border-t border-white/50">
+              <div className="flex items-center justify-around w-full">
+                <NavBtn active={view === 'feed'} onClick={() => setView('feed')} icon={<Home />} label="Home" />
+                <NavBtn active={view === (user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} onClick={() => setView(user.role === UserRole.CONTRACTOR ? 'search' : 'dashboard')} icon={user.role === UserRole.CONTRACTOR ? <LayoutGrid /> : <PieChart />} label={user.role === UserRole.CONTRACTOR ? 'Busca' : 'Gestão'} />
+                
+                {/* Central Action Button */}
+                {user.role === UserRole.CONTRACTOR ? (
+                  <button onClick={() => { setModalInitialCategory(null); setDirectHireProfessional(null); setModalOpen(true); }} className="relative -top-8 bg-primary hover:bg-primaryDark text-white w-14 h-14 rounded-full shadow-glow flex items-center justify-center transition-all hover:scale-110 active:scale-95">
+                     <Plus size={28} strokeWidth={2.5} />
+                  </button>
+                ) : (
+                  <NavBtn active={view === 'calendar'} onClick={() => setView('calendar')} icon={<Calendar />} label="Agenda" />
+                )}
+                
+                <NavBtn active={view === 'chats'} onClick={() => setView('chats')} icon={<MessageCircle />} label="Chat" notification={chats.some(c => c.unreadCount > 0)} />
+                <NavBtn active={view === 'profile'} onClick={() => setView('profile')} icon={<UserIcon />} label="Perfil" />
+              </div>
             </div>
-          </div>
-      )}
+        )}
 
-      <CreateProposalModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSubmit={handleCreateProposal} initialCategory={modalInitialCategory} targetProfessional={directHireProfessional} />
-      <ProposalDetailModal isOpen={!!viewProposal} onClose={() => setViewProposal(null)} proposal={viewProposal} onCancel={handleCancelProposal} currentUserId={user.id} />
-      <SecurityModal isOpen={isSecurityModalOpen} onClose={() => setIsSecurityModalOpen(false)} />
-      <FavoritesModal 
-          isOpen={isFavoritesModalOpen} 
-          onClose={() => setIsFavoritesModalOpen(false)} 
-          favorites={favorites} 
-          onRemove={toggleFavorite} 
-          onOpenSubscription={() => {}} 
-          isSubscriber={true} 
-          onViewProfile={handleViewProfile}
-      />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} onSwitchToAdmin={handleSwitchToAdmin} onContactSupport={handleContactSupport} />
-      <ReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} onSubmit={handleSubmitReview} professionalName={reviewTargetName} />
-      <PublicProfileModal 
-          isOpen={!!viewProfileUser} 
-          onClose={() => setViewProfileUser(null)} 
-          professional={viewProfileUser} 
-          onRequestQuote={() => { setViewProfileUser(null); setDirectHireProfessional(viewProfileUser); setModalOpen(true); }} 
-          isFavorite={viewProfileUser ? favorites.some(f => f.id === viewProfileUser.id) : false}
-          onToggleFavorite={toggleFavorite}
-      />
-      <PortfolioRequirementModal isOpen={isPortfolioModalOpen} onConfirm={() => { setIsPortfolioModalOpen(false); setView('dashboard'); }} />
+        <CreateProposalModal isOpen={isModalOpen} onClose={() => setModalOpen(false)} onSubmit={handleCreateProposal} initialCategory={modalInitialCategory} targetProfessional={directHireProfessional} />
+        <ProposalDetailModal isOpen={!!viewProposal} onClose={() => setViewProposal(null)} proposal={viewProposal} onCancel={handleCancelProposal} currentUserId={user.id} />
+        <SecurityModal isOpen={isSecurityModalOpen} onClose={() => setIsSecurityModalOpen(false)} />
+        <FavoritesModal 
+            isOpen={isFavoritesModalOpen} 
+            onClose={() => setIsFavoritesModalOpen(false)} 
+            favorites={favorites} 
+            onRemove={toggleFavorite} 
+            onOpenSubscription={() => {}} 
+            isSubscriber={true} 
+            onViewProfile={handleViewProfile}
+        />
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={user} onUpdateUser={handleUpdateUser} onLogout={handleLogout} onContactSupport={handleContactSupport} />
+        <ReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} onSubmit={handleSubmitReview} professionalName={reviewTargetName} />
+        <PublicProfileModal 
+            isOpen={!!viewProfileUser} 
+            onClose={() => setViewProfileUser(null)} 
+            professional={viewProfileUser} 
+            onRequestQuote={() => { setViewProfileUser(null); setDirectHireProfessional(viewProfileUser); setModalOpen(true); }} 
+            isFavorite={viewProfileUser ? favorites.some(f => f.id === viewProfileUser.id) : false}
+            onToggleFavorite={toggleFavorite}
+        />
+        <PortfolioRequirementModal isOpen={isPortfolioModalOpen} onConfirm={() => { setIsPortfolioModalOpen(false); setView('dashboard'); }} />
+      </div>
     </div>
   );
   
@@ -563,7 +561,7 @@ const App: React.FC = () => {
       : services.slice(0, 8); 
 
     return (
-    <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+    <div className="w-full px-6 py-6 animate-fade-in-up">
         <header className="flex justify-between items-center mb-8 pt-4">
             <div>
                 <p className="text-xs font-black uppercase text-primary tracking-widest mb-1">Linka Jobi</p>
@@ -810,7 +808,7 @@ const App: React.FC = () => {
 
   function renderSearch() { 
       return (
-        <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+        <div className="w-full px-6 py-6 animate-fade-in-up">
             <h2 className="font-display text-2xl font-extrabold text-secondary mb-6">Explorar</h2>
             <div className="relative mb-8">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -925,7 +923,7 @@ const App: React.FC = () => {
   
   function renderProfile() { 
       return (
-        <div className="max-w-xl mx-auto px-6 py-6 animate-fade-in-up">
+        <div className="w-full px-6 py-6 animate-fade-in-up">
             <div className="flex justify-between items-center mb-8"><h2 className="font-display text-2xl font-extrabold text-secondary">Meu Perfil</h2><button onClick={() => setIsSettingsOpen(true)} className="w-10 h-10 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-50 transition-colors"><Settings size={18} /></button></div>
             <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 mb-6 text-center">
                 <div className="flex flex-col items-center">

@@ -404,7 +404,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onExit }) => {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 gap-6">
                 <KPICard icon={<Users className="text-primary"/>} label="Usuários" value={stats.totalUsers} color="bg-primary/10" />
                 <KPICard icon={<Briefcase className="text-blue-600"/>} label="Jobs Ativos" value={stats.activeJobs} color="bg-blue-50" />
                 <KPICard icon={<Monitor className="text-purple-600"/>} label="Online" value={stats.onlineUsers} color="bg-purple-50" />
@@ -539,7 +539,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onExit }) => {
                         loadData(); 
                     }}
                     onRefresh={loadData}
-                    className="w-full h-full flex flex-col md:flex-row bg-white overflow-hidden relative"
+                    className="w-full h-full flex flex-col bg-white overflow-hidden relative"
                 />
             </div>
         </div>

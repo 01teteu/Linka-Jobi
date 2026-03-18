@@ -71,6 +71,12 @@ export interface ChatSession {
   lastMessage: string;
   unreadCount: number;
   isSupport?: boolean;
+  negotiation?: {
+    proposedPrice: number;
+    proposedBy: number;
+    status: 'pending' | 'accepted' | 'rejected';
+  };
+  agreedPrice?: number;
 }
 
 export interface Appointment {

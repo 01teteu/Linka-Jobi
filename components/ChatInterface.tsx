@@ -27,6 +27,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
     const [localMessages, setLocalMessages] = useState<Message[]>([]);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'messages' | 'budget'>('messages');
+    const [proposedPrice, setProposedPrice] = useState('');
+    const [showMoreOptions, setShowMoreOptions] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const socketRef = useRef<Socket | null>(null);
@@ -181,6 +184,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
         if (activeChat && onHire) {
             onHire(activeChat.proposalId, activeChat.professionalId);
             setIsPaymentModalOpen(false);
+        }
+    };
+
+    const handleProposePrice = async () => {
+        if (!proposedPrice || isNaN(Number(proposedPrice))) return;
+        try {
+            await Backend.proposePrice(activeChatId, Number(proposedPrice));
+            setProposedPrice('');
+            onRefresh?.();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleAcceptPrice = async () => {
+        try {
+            await Backend.acceptPrice(activeChatId);
+            onRefresh?.();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleRejectPrice = async () => {
+        try {
+            await Backend.rejectPrice(activeChatId);
+            onRefresh?.();
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -357,13 +389,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
         );
     }
 
-    const containerClasses = className || "max-w-5xl mx-auto h-[calc(100vh-140px)] flex flex-col md:flex-row animate-fade-in-up bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative";
+    const containerClasses = className || "w-full h-full flex flex-col animate-fade-in-up bg-white overflow-hidden relative";
 
     return (
         <div className={containerClasses}>
             
             {/* --- SIDEBAR (LISTA DE CHATS) --- */}
-            <div className={`w-full md:w-[320px] bg-white border-r border-gray-100 flex-col z-20 ${showList ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`w-full bg-white border-r border-gray-100 flex-col z-20 ${showList ? 'flex' : 'hidden'}`}>
                 <div className="p-6 pb-4 border-b border-gray-50 bg-white">
                     <h2 className="text-2xl font-black text-textMain tracking-tight">Mensagens</h2>
                     <p className="text-xs text-textMuted font-bold mt-1">{chats.length} conversas ativas</p>
@@ -433,14 +465,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
             </div>
 
             {/* --- JANELA DE CHAT --- */}
-            <div className={`flex-1 flex flex-col bg-[#FDFDFD] relative ${!showList ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`flex-1 flex flex-col bg-[#FDFDFD] relative ${!showList ? 'flex' : 'hidden'}`}>
                 {activeChat ? (
                     <>
                         {/* Header Flutuante */}
                         <div className="absolute top-0 left-0 right-0 z-10 px-6 py-4">
                             <div className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-sm rounded-[1.5rem] p-3 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <button onClick={() => setShowList(true)} className="md:hidden w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors">
+                                    <button onClick={() => setShowList(true)} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors">
                                         <ChevronLeft size={20} className="text-textMain" />
                                     </button>
                                     
@@ -517,226 +549,278 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
                                             </span>
                                         </button>
                                     )}
-                                    <button className="w-10 h-10 rounded-full hover:bg-gray-50 flex items-center justify-center text-textMuted transition-colors">
-                                        <MoreVertical size={18} />
-                                    </button>
+                                    <div className="relative">
+                                        <button 
+                                            onClick={() => setShowMoreOptions(!showMoreOptions)}
+                                            className="w-10 h-10 rounded-full hover:bg-gray-50 flex items-center justify-center text-textMuted transition-colors"
+                                        >
+                                            <MoreVertical size={18} />
+                                        </button>
+                                        
+                                        <AnimatePresence>
+                                            {showMoreOptions && (
+                                                <>
+                                                    <div 
+                                                        className="fixed inset-0 z-40"
+                                                        onClick={() => setShowMoreOptions(false)}
+                                                    />
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
+                                                    >
+                                                        <div className="p-4 space-y-4">
+                                                            {/* Safety Tip */}
+                                                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-3">
+                                                                <ShieldCheck size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                                                                <div>
+                                                                    <p className="text-[11px] text-blue-800 font-bold uppercase tracking-wide mb-1">Dica de Segurança</p>
+                                                                    <p className="text-xs text-blue-700 leading-relaxed">
+                                                                        Antes de realizar serviços domiciliares, recomendamos marcar um encontro em local público para alinhar os detalhes. Nunca compartilhe senhas ou dados bancários.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Open Order Warning */}
+                                                            {!isCompleted && !isInProgress && (
+                                                                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-start gap-3">
+                                                                    <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="text-[11px] text-amber-800 font-bold uppercase tracking-wide mb-1">Aviso</p>
+                                                                        <p className="text-xs text-amber-700 leading-relaxed">
+                                                                            {isContractor 
+                                                                                ? 'O pedido permanece em aberto para outros profissionais. O trabalho só deve começar quando você clicar em "Contratar".'
+                                                                                : 'O pedido permanece em aberto. Aguarde o cliente te contratar antes de iniciar o trabalho.'
+                                                                            }
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {/* Payment Security removed from here */}
+                                                        </div>
+                                                    </motion.div>
+                                                </>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Proposal Details & Security Warning */}
-                        <div className="pt-24 px-6 pb-2 space-y-3">
-                            {!activeChat.isSupport && (
-                                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-                                    <button 
-                                        onClick={() => setIsDetailsOpen(!isDetailsOpen)}
-                                        className="w-full flex items-center justify-between p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                        {/* Tabs */}
+                        {!activeChat.isSupport && (
+                            <div className="pt-24 px-6 pb-0">
+                                <div className="flex border-b border-gray-200">
+                                    <button
+                                        onClick={() => setActiveTab('messages')}
+                                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === 'messages' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            <div className="bg-primary/10 p-1.5 rounded-lg">
-                                                <DollarSign size={16} className="text-primary" />
-                                            </div>
-                                            <div className="text-left">
-                                                <h4 className="text-xs font-bold text-textMain uppercase tracking-wide">Detalhes da Proposta</h4>
-                                                <p className="text-[10px] text-textMuted font-medium truncate max-w-[200px]">{activeChat.proposalTitle}</p>
-                                            </div>
-                                        </div>
-                                        {isDetailsOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                                        Mensagens
                                     </button>
-                                    
-                                    <AnimatePresence>
-                                        {isDetailsOpen && (
-                                            <motion.div
-                                                key="chat-details"
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.2 }}
-                                            >
-                                                <div className="p-4 border-t border-gray-100 bg-white space-y-3">
-                                                    <div>
-                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Descrição</p>
-                                                        <p className="text-xs text-textMain leading-relaxed">{activeChat.proposalDescription || "Sem descrição disponível."}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-6">
-                                                        <div>
-                                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Orçamento</p>
-                                                            <p className="text-sm font-black text-green-600">{activeChat.proposalBudget ? `R$ ${activeChat.proposalBudget}` : "A combinar"}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                                                activeChat.proposalStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                                                                activeChat.proposalStatus === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                                                                'bg-yellow-100 text-yellow-700'
-                                                            }`}>
-                                                                {activeChat.proposalStatus === 'COMPLETED' ? 'Concluído' :
-                                                                 activeChat.proposalStatus === 'IN_PROGRESS' ? 'Em Andamento' : 'Em Negociação'}
-                                                            </span>
-                                                        </div>
+                                    <button
+                                        onClick={() => setActiveTab('budget')}
+                                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === 'budget' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Orçamento
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Proposal Details & Security Warning removed to make UI cleaner */}
+
+                        {activeTab === 'messages' ? (
+                            <>
+                                {/* Messages Area */}
+                                <div 
+                                    className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-3"
+                                    style={{
+                                        backgroundImage: `radial-gradient(#E5E7EB 1px, transparent 1px)`,
+                                        backgroundSize: '20px 20px'
+                                    }}
+                                >
+                                    {localMessages.map((msg, idx) => {
+                                        const isMe = msg.senderId === user.id;
+                                        if (msg.isSystem) return (
+                                            <div key={idx} className="flex justify-center my-6">
+                                                <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm border border-gray-200">
+                                                    {msg.text}
+                                                </span>
+                                            </div>
+                                        );
+                                        
+                                        return (
+                                            <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-scale-in`}>
+                                                <div className={`max-w-[85%] sm:max-w-[70%] p-4 shadow-sm relative group ${
+                                                    isMe 
+                                                    ? 'bg-gradient-to-br from-primary to-violet-600 text-white rounded-[20px] rounded-tr-none' 
+                                                    : 'bg-white text-textMain border border-gray-100 rounded-[20px] rounded-tl-none'
+                                                }`}>
+                                                    {renderMessageContent(msg, isMe)}
+
+                                                    <div className={`text-[9px] mt-1.5 flex items-center gap-1 justify-end font-bold uppercase ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
+                                                        {msg.timestamp}
+                                                        {isMe && <CheckCheck className="w-3 h-3 opacity-80" />}
                                                     </div>
                                                 </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                            </div>
+                                        );
+                                    })}
+                                    <div ref={messagesEndRef} className="h-4" />
                                 </div>
-                            )}
 
-                            {!activeChat.isSupport && (
-                                <>
-                                    {/* Safety Tip */}
-                                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-3 shadow-sm">
-                                        <ShieldCheck size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                                        <div>
-                                            <p className="text-[11px] text-blue-800 font-bold uppercase tracking-wide mb-1">Dica de Segurança</p>
-                                            <p className="text-xs text-blue-700 leading-relaxed">
-                                                Antes de realizar serviços domiciliares, recomendamos marcar um encontro em local público para alinhar os detalhes. Isso garante maior segurança para ambas as partes.
-                                            </p>
+                                {/* Input Area Flutuante */}
+                                <div className="p-4 sm:p-6 bg-transparent sticky bottom-0 z-20">
+                                    <form 
+                                        onSubmit={handleSendText} 
+                                        className="bg-white p-2 rounded-[2rem] border border-gray-100 shadow-[0_10px_30px_rgba(0,0,0,0.1)] flex items-end gap-2"
+                                    >
+                                        {/* Botões de Anexo */}
+                                        <div className="flex gap-1 p-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={isCompleted || isJobTaken}
+                                                className="w-10 h-10 bg-gray-50 hover:bg-gray-100 text-textMuted rounded-full transition-colors flex items-center justify-center active:scale-95 disabled:opacity-50"
+                                                title="Enviar Imagem"
+                                            >
+                                                <ImageIcon size={20} />
+                                            </button>
+                                            <input 
+                                                type="file" 
+                                                ref={fileInputRef} 
+                                                className="hidden" 
+                                                accept="image/*" 
+                                                onChange={handleImageUpload}
+                                            />
+                                            
+                                            {!activeChat.isSupport && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setIsScheduleOpen(true)}
+                                                    disabled={isCompleted || isJobTaken}
+                                                    className="w-10 h-10 bg-gray-50 hover:bg-gray-100 text-textMuted rounded-full transition-colors flex items-center justify-center active:scale-95 disabled:opacity-50"
+                                                    title="Agendar Visita"
+                                                >
+                                                    <Calendar size={20} />
+                                                </button>
+                                            )}
                                         </div>
+
+                                        {/* Text Input */}
+                                        <div className="flex-1 bg-gray-50 rounded-[1.5rem] border border-transparent focus-within:border-primary/20 focus-within:bg-white transition-all flex items-center mb-1">
+                                            <textarea 
+                                                value={newMessage}
+                                                onChange={(e) => setNewMessage(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        handleSendText(e);
+                                                    }
+                                                }}
+                                                placeholder={activeChat.isSupport ? (user.role === UserRole.ADMIN ? "Digite sua mensagem..." : "Digite sua mensagem para o suporte...") : isCompleted ? "Este job foi finalizado." : isJobTaken ? "Proposta encerrada." : "Digite sua mensagem..."}
+                                                disabled={isCompleted || isJobTaken}
+                                                rows={1}
+                                                className="w-full bg-transparent px-4 py-3 text-sm font-medium text-textMain outline-none resize-none disabled:opacity-50 max-h-32"
+                                                style={{ minHeight: '44px' }}
+                                            />
+                                        </div>
+                                        
+                                        <button 
+                                            type="submit" 
+                                            disabled={!newMessage.trim() || isCompleted || isJobTaken}
+                                            className="w-12 h-12 bg-primary text-white rounded-full shadow-lg shadow-primary/30 hover:bg-violet-700 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center shrink-0 mb-1"
+                                        >
+                                            <Send className="w-5 h-5 ml-0.5" />
+                                        </button>
+                                    </form>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-gray-50">
+                                <div className="max-w-md mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                                    <div className="text-center">
+                                        <h3 className="text-lg font-black text-textMain mb-1">Negociação de Valores</h3>
+                                        <p className="text-sm text-textMuted">Proponha ou aceite um novo valor para o serviço.</p>
                                     </div>
 
-                                    {isCompleted ? (
-                                        <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 flex items-center justify-center gap-2 text-center shadow-sm">
-                                            <CheckCircle2 size={14} className="text-green-600" />
-                                            <p className="text-[10px] text-green-800 font-bold uppercase tracking-wide leading-tight">
-                                                Contrato fechado com {activeChat.participants.find(p => p.id === activeChat.professionalId)?.name || 'Profissional'}
-                                            </p>
+                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center">
+                                        <span className="text-sm font-bold text-textMuted uppercase tracking-wide">Valor Atual</span>
+                                        <span className="text-lg font-black text-textMain">{activeChat.proposalBudget ? `R$ ${activeChat.proposalBudget}` : "A combinar"}</span>
+                                    </div>
+
+                                    {activeChat.negotiation?.status === 'accepted' ? (
+                                        <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center space-y-2">
+                                            <CheckCircle2 size={32} className="text-green-500 mx-auto" />
+                                            <p className="text-sm font-bold text-green-800 uppercase tracking-wide">Orçamento Fechado</p>
+                                            <p className="text-2xl font-black text-green-600">R$ {activeChat.negotiation.proposedPrice.toFixed(2)}</p>
                                         </div>
-                                    ) : isJobTaken ? (
-                                        <div className="bg-red-50 border border-red-100 rounded-xl p-2.5 flex items-center justify-center gap-2 text-center shadow-sm">
-                                            <AlertTriangle size={14} className="text-red-600" />
-                                            <p className="text-[10px] text-red-800 font-bold uppercase tracking-wide leading-tight">
-                                                Esta proposta já foi aceita por outro profissional. O chat está encerrado.
-                                            </p>
-                                        </div>
-                                    ) : isInProgress && isHiredHere ? (
-                                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-2.5 flex items-center justify-center gap-2 text-center shadow-sm">
-                                            <ShieldCheck size={14} className="text-blue-600" />
-                                            <p className="text-[10px] text-blue-800 font-bold uppercase tracking-wide leading-tight">
-                                                Trabalho em andamento! Só clique em "Finalizar" após a conclusão do serviço.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col gap-2">
-                                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-2.5 flex items-center justify-center gap-2 text-center shadow-sm">
-                                                <AlertTriangle size={14} className="text-amber-600" />
-                                                <p className="text-[10px] text-amber-800 font-bold uppercase tracking-wide leading-tight">
-                                                    {isContractor 
-                                                        ? 'Aviso: O pedido permanece em aberto para outros profissionais. O trabalho só deve começar quando você clicar em "Contratar".'
-                                                        : 'Aviso: O pedido permanece em aberto. Aguarde o cliente te contratar antes de iniciar o trabalho.'
-                                                    }
+                                    ) : activeChat.negotiation?.status === 'pending' ? (
+                                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 space-y-4">
+                                            <div className="text-center">
+                                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">Nova Proposta</p>
+                                                <p className="text-2xl font-black text-amber-600">R$ {activeChat.negotiation.proposedPrice.toFixed(2)}</p>
+                                                <p className="text-xs text-amber-700 mt-1">
+                                                    Proposto por {String(activeChat.negotiation.proposedBy) === String(user.id) ? 'você' : otherParticipant?.name}
                                                 </p>
                                             </div>
+                                            
+                                            {String(activeChat.negotiation.proposedBy) !== String(user.id) ? (
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        onClick={handleRejectPrice}
+                                                        className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+                                                    >
+                                                        Recusar
+                                                    </button>
+                                                    <button 
+                                                        onClick={handleAcceptPrice}
+                                                        className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-green-500 text-white hover:bg-green-600 transition-colors shadow-sm"
+                                                    >
+                                                        Aceitar
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center text-sm font-medium text-amber-700">
+                                                    Aguardando resposta da outra parte...
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-
-                        {/* Messages Area */}
-                        <div 
-                            className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-3"
-                            style={{
-                                backgroundImage: `radial-gradient(#E5E7EB 1px, transparent 1px)`,
-                                backgroundSize: '20px 20px'
-                            }}
-                        >
-                            {localMessages.map((msg, idx) => {
-                                const isMe = msg.senderId === user.id;
-                                if (msg.isSystem) return (
-                                    <div key={idx} className="flex justify-center my-6">
-                                        <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm border border-gray-200">
-                                            {msg.text}
-                                        </span>
-                                    </div>
-                                );
-                                
-                                return (
-                                    <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-scale-in`}>
-                                        <div className={`max-w-[85%] sm:max-w-[70%] p-4 shadow-sm relative group ${
-                                            isMe 
-                                            ? 'bg-gradient-to-br from-primary to-violet-600 text-white rounded-[20px] rounded-tr-none' 
-                                            : 'bg-white text-textMain border border-gray-100 rounded-[20px] rounded-tl-none'
-                                        }`}>
-                                            {renderMessageContent(msg, isMe)}
-
-                                            <div className={`text-[9px] mt-1.5 flex items-center gap-1 justify-end font-bold uppercase ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
-                                                {msg.timestamp}
-                                                {isMe && <CheckCheck className="w-3 h-3 opacity-80" />}
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {activeChat.negotiation?.status === 'rejected' && (
+                                                <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-center">
+                                                    <p className="text-xs font-bold text-red-800 uppercase tracking-wide">Última proposta recusada</p>
+                                                </div>
+                                            )}
+                                            
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-textMain uppercase tracking-wide">Propor Novo Valor</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-textMuted font-bold">R$</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={proposedPrice}
+                                                        onChange={(e) => setProposedPrice(e.target.value)}
+                                                        placeholder="0.00"
+                                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-textMain focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                                    />
+                                                </div>
                                             </div>
+                                            <button 
+                                                onClick={handleProposePrice}
+                                                disabled={!proposedPrice || isNaN(Number(proposedPrice)) || isCompleted || isJobTaken}
+                                                className="w-full py-3 rounded-xl font-bold text-sm bg-primary text-white hover:bg-primaryDark transition-colors shadow-sm disabled:opacity-50 disabled:hover:bg-primary"
+                                            >
+                                                Enviar Proposta
+                                            </button>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                            <div ref={messagesEndRef} className="h-4" />
-                        </div>
-
-                        {/* Input Area Flutuante */}
-                        <div className="p-4 sm:p-6 bg-transparent sticky bottom-0 z-20">
-                            <form 
-                                onSubmit={handleSendText} 
-                                className="bg-white p-2 rounded-[2rem] border border-gray-100 shadow-[0_10px_30px_rgba(0,0,0,0.1)] flex items-end gap-2"
-                            >
-                                {/* Botões de Anexo */}
-                                <div className="flex gap-1 p-1">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={isCompleted || isJobTaken}
-                                        className="w-10 h-10 bg-gray-50 hover:bg-gray-100 text-textMuted rounded-full transition-colors flex items-center justify-center active:scale-95 disabled:opacity-50"
-                                        title="Enviar Imagem"
-                                    >
-                                        <ImageIcon size={20} />
-                                    </button>
-                                    <input 
-                                        type="file" 
-                                        ref={fileInputRef} 
-                                        className="hidden" 
-                                        accept="image/*" 
-                                        onChange={handleImageUpload}
-                                    />
-                                    
-                                    {!activeChat.isSupport && (
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setIsScheduleOpen(true)}
-                                            disabled={isCompleted || isJobTaken}
-                                            className="w-10 h-10 bg-gray-50 hover:bg-gray-100 text-textMuted rounded-full transition-colors flex items-center justify-center active:scale-95 disabled:opacity-50"
-                                            title="Agendar Visita"
-                                        >
-                                            <Calendar size={20} />
-                                        </button>
                                     )}
                                 </div>
-
-                                {/* Text Input */}
-                                <div className="flex-1 bg-gray-50 rounded-[1.5rem] border border-transparent focus-within:border-primary/20 focus-within:bg-white transition-all flex items-center mb-1">
-                                    <textarea 
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleSendText(e);
-                                            }
-                                        }}
-                                        placeholder={activeChat.isSupport ? (user.role === UserRole.ADMIN ? "Digite sua mensagem..." : "Digite sua mensagem para o suporte...") : isCompleted ? "Este job foi finalizado." : isJobTaken ? "Proposta encerrada." : "Digite sua mensagem..."}
-                                        disabled={isCompleted || isJobTaken}
-                                        rows={1}
-                                        className="w-full bg-transparent px-4 py-3 text-sm font-medium text-textMain outline-none resize-none disabled:opacity-50 max-h-32"
-                                        style={{ minHeight: '44px' }}
-                                    />
-                                </div>
-                                
-                                <button 
-                                    type="submit" 
-                                    disabled={!newMessage.trim() || isCompleted || isJobTaken}
-                                    className="w-12 h-12 bg-primary text-white rounded-full shadow-lg shadow-primary/30 hover:bg-violet-700 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center shrink-0 mb-1"
-                                >
-                                    <Send className="w-5 h-5 ml-0.5" />
-                                </button>
-                            </form>
-                        </div>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-gray-50/50">

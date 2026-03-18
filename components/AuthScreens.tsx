@@ -157,28 +157,12 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
       });
   };
 
-  const demoLogin = async (email: string, role: UserRole) => {
-    setRole(role);
-    setEmail(email);
-    setPassword('123456');
-    setLoading(true);
-    
-    try {
-        const res = await Backend.login(email, role, '123456');
-        onLogin(res.user);
-    } catch (err: any) {
-        addToast("Falha no login demo: " + err.message, "error");
-    } finally {
-        setLoading(false);
-    }
-  };
-
   const bgImage = role === UserRole.PROFESSIONAL 
     ? "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=1920&auto=format&fit=crop"
     : "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=1920&auto=format&fit=crop";
 
   return (
-    <div className="min-h-[100dvh] relative flex items-end sm:items-center justify-center bg-primary overflow-hidden font-sans">
+    <div className="flex-1 w-full relative flex flex-col justify-end bg-primary overflow-hidden font-sans">
         
         {/* Immersive Background */}
         <div className="absolute inset-0 z-0">
@@ -191,7 +175,7 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 className="w-full h-full object-cover mix-blend-overlay"
                 alt="Background"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-primaryDark via-primary/80 to-transparent sm:via-primary/90" />
+            <div className="absolute inset-0 bg-gradient-to-t from-primaryDark via-primary/80 to-transparent" />
         </div>
 
         {/* Form Container */}
@@ -199,14 +183,14 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="relative z-10 w-full max-w-md bg-white sm:bg-white/95 sm:backdrop-blur-xl rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[90vh]"
+            className="relative z-10 w-full bg-white rounded-t-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]"
         >
             {/* Mobile Drag Handle Indicator */}
             <div className="w-full flex justify-center pt-4 pb-2 sm:hidden">
                 <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
             </div>
 
-            <div className="px-6 pb-6 sm:p-8 overflow-y-auto custom-scrollbar">
+            <div className="px-6 pb-10 sm:p-8 overflow-y-auto custom-scrollbar">
                 
                 {/* Header */}
                 <div className="mb-6">
@@ -535,27 +519,6 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                         </p>
                     )}
                 </div>
-
-                {/* Demo Logins */}
-                {viewState === 'login' && (
-                    <div className="mt-8 pt-6 border-t border-gray-100">
-                        <p className="text-xs font-black uppercase tracking-wider text-gray-400 text-center mb-4">Acesso Rápido (Demo)</p>
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={() => demoLogin('jane@linka.com', UserRole.CONTRACTOR)}
-                                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gray-50 hover:bg-primary/5 hover:text-primary text-gray-700 font-bold text-xs transition-colors border border-gray-200 hover:border-primary/20"
-                            >
-                                <User size={14} /> Demo Cliente
-                            </button>
-                            <button 
-                                onClick={() => demoLogin('joao@linka.com', UserRole.PROFESSIONAL)}
-                                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gray-50 hover:bg-primary/5 hover:text-primary text-gray-700 font-bold text-xs transition-colors border border-gray-200 hover:border-primary/20"
-                            >
-                                <Hammer size={14} /> Demo Profissional
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         </motion.div>
 

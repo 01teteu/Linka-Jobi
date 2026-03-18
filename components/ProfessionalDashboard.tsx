@@ -28,7 +28,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({ stats, us
     const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     return (
-        <div className="max-w-5xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
+        <div className="w-full px-6 py-8 pb-32 animate-fade-in-up">
             
             {/* --- HEADER --- */}
             <div className="flex justify-between items-end mb-8">
@@ -396,7 +396,7 @@ const PortfolioTab = ({ user, onUpdateUser }: { user: User, onUpdateUser: (data:
                 </div>
 
                 <div className="px-6 pb-6">
-                    <div className="flex flex-col md:flex-row items-start md:items-end -mt-12 mb-4 gap-4">
+                    <div className="flex flex-col items-start -mt-12 mb-4 gap-4">
                         {/* Avatar */}
                         <div className="relative group cursor-pointer" onClick={() => !uploadingAvatar && avatarInputRef.current?.click()}>
                             <div className="w-32 h-32 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative flex items-center justify-center">
@@ -490,7 +490,7 @@ const PortfolioTab = ({ user, onUpdateUser }: { user: User, onUpdateUser: (data:
                     axis="y" 
                     values={formData.portfolioImages} 
                     onReorder={(newOrder) => setFormData(prev => ({ ...prev, portfolioImages: newOrder }))}
-                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 list-none p-0 m-0"
+                    className="grid grid-cols-1 gap-4 list-none p-0 m-0"
                 >
                     {formData.portfolioImages.map((img) => (
                         <Reorder.Item 
@@ -682,7 +682,7 @@ const OverviewTab = ({ stats, formatCurrency, maxChartValue }: any) => (
                 {/* Texture Overlay */}
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 mix-blend-overlay"></div>
 
-                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center md:items-end gap-8">
+                <div className="relative z-10 flex flex-col justify-between items-center gap-8">
                     <div className="space-y-6 flex-1 w-full">
                         <div className="flex items-center justify-between md:justify-start gap-4">
                             <div className="flex items-center gap-3 opacity-90">
@@ -728,7 +728,7 @@ const OverviewTab = ({ stats, formatCurrency, maxChartValue }: any) => (
             </div>
 
             {/* --- METRICS GRID --- */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 animate-fade-in-up delay-100">
+            <div className="grid grid-cols-2 gap-4 mb-8 animate-fade-in-up delay-100">
                 <MetricCard 
                     icon={<Eye size={20}/>} 
                     value={stats.profileViews} 

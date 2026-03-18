@@ -154,7 +154,7 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onViewPropo
     }
 
     return (
-        <div className="max-w-2xl mx-auto px-4 py-6 pb-32">
+        <div className="w-full px-4 py-6 pb-32">
             <header className="mb-8 flex justify-between items-end">
                 <div>
                     <h2 className="text-3xl font-black text-textMain tracking-tight">Minha Agenda</h2>

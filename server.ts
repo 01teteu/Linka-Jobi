@@ -198,101 +198,10 @@ const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
 
 
 // --- IN-MEMORY FALLBACK (MOCK DB) ---
-const MEMORY_USERS: any[] = [
-    {
-        id: 1,
-        nome: 'Jane Doe',
-        email: 'jane@linka.com',
-        senha_hash: bcrypt.hashSync('123456', 10),
-        role: 'CONTRACTOR',
-        avatar_url: 'https://i.pravatar.cc/150?u=jane@linka.com',
-        localizacao: 'São Paulo, SP',
-        telefone: '(11) 99999-9999',
-        specialty: null,
-        latitude: -23.55052,
-        longitude: -46.633308,
-        status: 'ACTIVE',
-        is_subscriber: false,
-        rating: 5.0,
-        reviews_count: 0,
-        xp: 100,
-        bio: 'Cliente Demo',
-        portfolio: []
-    },
-    {
-        id: 2,
-        nome: 'João Silva',
-        email: 'joao@linka.com',
-        senha_hash: bcrypt.hashSync('123456', 10),
-        role: 'PROFESSIONAL',
-        avatar_url: 'https://i.pravatar.cc/150?u=joao@linka.com',
-        localizacao: 'Rio de Janeiro, RJ',
-        telefone: '(21) 99999-9999',
-        specialty: 'Eletricista, Encanador',
-        latitude: -22.9068,
-        longitude: -43.1729,
-        status: 'ACTIVE',
-        is_subscriber: true,
-        rating: 4.8,
-        reviews_count: 12,
-        xp: 500,
-        bio: 'Profissional Demo',
-        portfolio: []
-    }
-];
+const MEMORY_USERS: any[] = [];
+const MEMORY_PROPOSALS: any[] = [];
 
-const MEMORY_PROPOSALS: any[] = [
-    {
-        id: 1,
-        contratante_id: 1,
-        titulo: 'Instalação de Chuveiro Elétrico',
-        descricao: 'Preciso de um eletricista para instalar um chuveiro novo. A fiação já existe, mas precisa verificar se o disjuntor aguenta.',
-        area_tag: 'Eletricista',
-        localizacao: 'São Paulo, SP',
-        orcamento_estimado: 'R$ 100 - R$ 200',
-        status: 'OPEN',
-        data_criacao: new Date().toISOString(),
-        accepted_count: 0,
-        contractor_name: 'Jane Doe',
-        contractor_avatar: 'https://i.pravatar.cc/150?u=jane@linka.com',
-        contractor_rating: 5.0,
-        contractor_reviews_count: 0
-    },
-    {
-        id: 2,
-        contratante_id: 1,
-        titulo: 'Reparo em Vazamento na Pia',
-        descricao: 'A pia da cozinha está pingando muito. Acredito que seja o sifão ou a torneira.',
-        area_tag: 'Encanador',
-        localizacao: 'São Paulo, SP',
-        orcamento_estimado: 'R$ 80 - R$ 150',
-        status: 'OPEN',
-        data_criacao: new Date(Date.now() - 86400000).toISOString(),
-        accepted_count: 1,
-        contractor_name: 'Jane Doe',
-        contractor_avatar: 'https://i.pravatar.cc/150?u=jane@linka.com',
-        contractor_rating: 5.0,
-        contractor_reviews_count: 0
-    },
-    {
-        id: 3,
-        contratante_id: 1,
-        titulo: 'Pintura de Sala e Quarto',
-        descricao: 'Gostaria de pintar uma sala de 20m2 e um quarto de 12m2. Tinta branca fosca.',
-        area_tag: 'Pintor',
-        localizacao: 'São Paulo, SP',
-        orcamento_estimado: 'R$ 500 - R$ 800',
-        status: 'OPEN',
-        data_criacao: new Date(Date.now() - 172800000).toISOString(),
-        accepted_count: 2,
-        contractor_name: 'Jane Doe',
-        contractor_avatar: 'https://i.pravatar.cc/150?u=jane@linka.com',
-        contractor_rating: 5.0,
-        contractor_reviews_count: 0
-    }
-];
-
-let memoryIdCounter = 3;
+let memoryIdCounter = 1;
 
 // Auth Middleware
 const authenticate = async (req: any, res: any, next: any) => {
@@ -646,7 +555,7 @@ app.post('/api/register', rateLimiter, async (req, res) => {
                 is_subscriber: false,
                 rating: 5.0,
                 reviews_count: 0,
-                xp: 100,
+                xp: 0,
                 bio: '',
                 services: []
             };
@@ -1016,36 +925,18 @@ app.get('/api/admin/reports', authenticate, async (req: any, res) => {
             return res.json(result.rows);
         } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao buscar denúncias.' }); }
     } else {
-        // Mock Reports
-        return res.json([
-            { id: 1, reporter_id: 1, reported_id: 2, reason: 'SPAM', description: 'Enviando mensagens repetidas', status: 'OPEN', created_at: new Date(), reporter_name: 'Jane Doe', reported_name: 'João Silva' }
-        ]);
+        return res.json([]);
     }
 });
 
 app.get('/api/professionals/top', async (_req, res) => {
-    const fallback = [
-        { id: 901, name: 'Marcos Dev', email: 'marcos@linka.com', role: 'PROFESSIONAL', avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d', specialty: 'Desenvolvedor Web', rating: 5.0, reviewsCount: 89, location: 'Vila Madalena', coordinates: { lat: -23.5489, lng: -46.6860 } },
-        { id: 902, name: 'Ana Tech', email: 'ana@linka.com', role: 'PROFESSIONAL', avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', specialty: 'Suporte Técnico', rating: 4.8, reviewsCount: 210, location: 'Pinheiros', coordinates: { lat: -23.5663, lng: -46.6924 } }
-    ];
-    if (!isDbConnected) return res.json(fallback);
+    if (!isDbConnected) return res.json([]);
     
     try {
-        // Note: This endpoint is public, so we don't have req.user usually.
-        // But if we want to filter for logged in users, we need auth middleware or check header manually.
-        // For now, let's assume public view doesn't filter blocks (since we don't know who is asking).
-        // If the user is logged in, the frontend might pass the token, but this route is not using 'authenticate'.
-        // To support blocking, we should probably make it authenticated optional, or just ignore blocking for public lists.
-        // Given the requirement "ensure blocking functionality is fully integrated", I'll leave public lists as is, 
-        // OR check if token is present.
-        
-        // Let's keep it simple: Public lists show everyone. Blocking applies when interacting.
-        // However, 'search' below might be used by logged in users.
-        
         const result = await pool.query(`SELECT * FROM users WHERE role = 'PROFESSIONAL' AND status = 'ACTIVE' ORDER BY rating DESC, reviews_count DESC LIMIT 10`);
         if (result.rowCount === 0) return res.json([]);
         return res.json(result.rows.map(mapUserToFrontend));
-    } catch { return res.json(fallback); }
+    } catch { return res.json([]); }
 });
 
 // ✅ Busca por especialidade e raio geográfico
@@ -1082,13 +973,6 @@ app.get('/api/professionals/search', async (req: any, res) => {
 
 app.get('/api/users/:id/public_profile', async (req, res) => {
     const { id } = req.params;
-    if (id === '901' || id === '902') {
-        const mock: any = {
-            '901': { id: 901, nome: 'Marcos Dev', email: 'marcos@linka.com', role: 'PROFESSIONAL', avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d', specialty: 'Desenvolvedor Web', rating: 5.0, reviews_count: 89, localizacao: 'Vila Madalena', latitude: -23.5489, longitude: -46.6860, bio: 'Desenvolvedor Full Stack com 10 anos de experiência.', xp: 5000 },
-            '902': { id: 902, nome: 'Ana Tech', email: 'ana@linka.com', role: 'PROFESSIONAL', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', specialty: 'Suporte Técnico', rating: 4.8, reviews_count: 210, localizacao: 'Pinheiros', latitude: -23.5663, longitude: -46.6924, bio: 'Especialista em hardware e redes.', xp: 3000 }
-        };
-        return res.json({ user: mapUserToFrontend(mock[id]), portfolio: [], reviews: [], services: [] });
-    }
     try {
         const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
         if (userRes.rowCount === 0) return res.status(404).json({ error: "User not found" });
@@ -1110,32 +994,7 @@ app.get('/api/proposals', authenticate, async (req: any, res) => {
     const offset = (Number(page) - 1) * Number(limit);
     
     if (!isDbConnected) {
-        let proposals = MEMORY_PROPOSALS;
-        if (contractorId) {
-            proposals = proposals.filter(p => p.contratante_id === Number(contractorId));
-        } else {
-            proposals = proposals.filter(p => p.status === 'OPEN');
-        }
-        
-        if (area) {
-            proposals = proposals.filter(p => p.area_tag.toLowerCase().includes(String(area).toLowerCase()));
-        }
-
-        // Mock Location Filter (Simple approximation)
-        if (lat && lng && radius) {
-            const r = parseFloat(String(radius));
-            const centerLat = parseFloat(String(lat));
-            const centerLng = parseFloat(String(lng));
-            proposals = proposals.filter(p => {
-                if (!p.latitude || !p.longitude) return true; // Include if no location (or exclude?)
-                const d = Math.sqrt(Math.pow(p.latitude - centerLat, 2) + Math.pow(p.longitude - centerLng, 2)) * 111; // approx km
-                return d <= r;
-            });
-        }
-        
-        // Pagination
-        const paged = proposals.slice(offset, offset + Number(limit));
-        return res.json(paged.map(mapProposalToFrontend));
+        return res.json([]);
     }
 
     // Base query
@@ -1396,20 +1255,6 @@ app.post('/api/proposals/:id/complete', authenticate, async (req: any, res) => {
     const { professionalId } = req.body;
 
     if (!isDbConnected) {
-        const p = MEMORY_PROPOSALS.find(p => p.id === Number(id));
-        if (!p) return res.status(404).json({ error: 'Proposta não encontrada' });
-        
-        if (p.contratante_id !== req.user.id) return res.status(403).json({ error: 'Apenas o contratante pode finalizar.' });
-
-        p.status = 'COMPLETED';
-        
-        // Mock XP update
-        const targetProId = professionalId || p.profissional_id;
-        if (targetProId) {
-            const pro = MEMORY_USERS.find(u => u.id === Number(targetProId));
-            if (pro) pro.xp = (pro.xp || 0) + 500;
-        }
-
         return res.json({ success: true });
     }
 
@@ -1482,42 +1327,13 @@ app.post('/api/reviews', authenticate, async (req: any, res) => {
 app.get('/api/chats', authenticate, async (req: any, res) => {
     try {
         if (!isDbConnected) {
-             if (req.user.role === 'ADMIN') {
-                 // Mock support chats for Admin
-                 return res.json([
-                    {
-                        id: 101, proposalId: 901, proposalTitle: 'Suporte Técnico', contractorId: 2, professionalId: req.user.id, proposalStatus: 'OPEN',
-                        participants: [{ id: 2, name: 'Maria Silva', avatar: 'https://ui-avatars.com/api/?name=Maria+Silva' }, { id: req.user.id, name: 'Suporte', avatar: '' }],
-                        messages: [
-                            { id: 1, senderId: 2, text: 'Olá, estou com problemas no pagamento.', timestamp: '10:30', type: 'text' },
-                            { id: 2, senderId: req.user.id, text: 'Olá Maria, qual o erro que aparece?', timestamp: '10:32', type: 'text' }
-                        ], 
-                        lastMessage: 'Olá Maria, qual o erro que aparece?', unreadCount: 1, isSupport: true
-                    },
-                    {
-                        id: 102, proposalId: 902, proposalTitle: 'Dúvida sobre Perfil', contractorId: 3, professionalId: req.user.id, proposalStatus: 'OPEN',
-                        participants: [{ id: 3, name: 'João Souza', avatar: 'https://ui-avatars.com/api/?name=Joao+Souza' }, { id: req.user.id, name: 'Suporte', avatar: '' }],
-                        messages: [
-                            { id: 1, senderId: 3, text: 'Como altero minha foto de perfil?', timestamp: '09:15', type: 'text' }
-                        ], 
-                        lastMessage: 'Como altero minha foto de perfil?', unreadCount: 1, isSupport: true
-                    }
-                 ]);
-             }
-
-             return res.json([
-                {
-                    id: 1, proposalId: 101, proposalTitle: 'Suporte', contractorId: req.user.id, professionalId: 999, proposalStatus: 'OPEN',
-                    participants: [{ id: req.user.id, name: 'Você', avatar: '' }, { id: 999, name: 'Suporte', avatar: '' }],
-                    messages: [], lastMessage: 'Bem-vindo ao suporte', unreadCount: 0, isSupport: true
-                }
-             ]);
+             return res.json([]);
         }
 
         // Filter out chats where the other participant is blocked or has blocked me
         let query = `
             SELECT cs.id as chat_id, p.id as proposal_id, p.titulo, p.descricao, p.orcamento_estimado, p.status as proposal_status, p.profissional_id as hired_professional_id,
-                   p.contratante_id, cs.professional_id, u1.nome as c_name, u1.avatar_url as c_avatar, u1.email as c_email,
+                   p.contratante_id, cs.professional_id, cs.negotiation, u1.nome as c_name, u1.avatar_url as c_avatar, u1.email as c_email,
                    u2.nome as p_name, u2.avatar_url as p_avatar, u2.email as p_email,
                    (SELECT texto FROM chat_messages WHERE session_id = cs.id ORDER BY timestamp DESC LIMIT 1) as last_msg
             FROM chat_sessions cs JOIN propostas p ON cs.proposta_id = p.id
@@ -1557,6 +1373,7 @@ app.get('/api/chats', authenticate, async (req: any, res) => {
                 proposalDescription: row.descricao, proposalBudget: row.orcamento_estimado,
                 contractorId: row.contratante_id, professionalId: row.professional_id, proposalStatus: row.proposal_status,
                 hiredProfessionalId: row.hired_professional_id,
+                negotiation: row.negotiation,
                 participants: [{ id: row.contratante_id, name: row.c_name, avatar: row.c_avatar }, { id: row.professional_id, name: row.p_name || 'Profissional', avatar: row.p_avatar }],
                 messages: msgsRes.rows.map((m: any) => ({ id: m.id, senderId: m.sender_id || 0, text: m.texto, timestamp: new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), isSystem: m.is_system, type: m.msg_type, ...m.metadata })),
                 lastMessage: row.last_msg || 'Início', unreadCount: 0,
@@ -1565,6 +1382,97 @@ app.get('/api/chats', authenticate, async (req: any, res) => {
         }));
         return res.json(chats);
     } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao buscar chats' }); }
+});
+
+app.post('/api/chats/:id/negotiate', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+    const { price } = req.body;
+    try {
+        const negotiation = { proposedPrice: price, proposedBy: req.user.id, status: 'pending' };
+        await pool.query('UPDATE chat_sessions SET negotiation = $1 WHERE id = $2', [JSON.stringify(negotiation), id]);
+        
+        // Notify other user via socket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`chat_${id}`).emit('proposal_update', { chatId: id });
+            
+            // Add system message
+            const sysMsg = `${req.user.nome} propôs um novo valor: R$ ${price}`;
+            const msgRes = await pool.query(`INSERT INTO chat_messages (session_id, sender_id, texto, is_system) VALUES ($1, NULL, $2, true) RETURNING id, timestamp`, [id, sysMsg]);
+            const newMsg = msgRes.rows[0];
+            io.to(`chat_${id}`).emit('new_message', { 
+                id: newMsg.id, senderId: 0, text: sysMsg, 
+                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                isSystem: true, type: 'text' 
+            });
+        }
+        return res.json({ success: true, negotiation });
+    } catch (err) { res.status(500).json({ error: 'Erro ao propor valor' }); }
+});
+
+app.post('/api/chats/:id/negotiate/accept', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+        const chatRes = await pool.query('SELECT negotiation, proposta_id FROM chat_sessions WHERE id = $1', [id]);
+        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado' });
+        
+        const neg = chatRes.rows[0].negotiation;
+        if (!neg || neg.status !== 'pending' || String(neg.proposedBy) === String(req.user.id)) {
+            return res.status(400).json({ error: 'Não é possível aceitar esta proposta' });
+        }
+        
+        neg.status = 'accepted';
+        await pool.query('UPDATE chat_sessions SET negotiation = $1 WHERE id = $2', [JSON.stringify(neg), id]);
+        
+        // Update proposal budget to agreed price
+        await pool.query('UPDATE propostas SET orcamento_estimado = $1 WHERE id = $2', [neg.proposedPrice.toString(), chatRes.rows[0].proposta_id]);
+        
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`chat_${id}`).emit('proposal_update', { chatId: id });
+            
+            const sysMsg = `${req.user.nome} aceitou o valor de R$ ${neg.proposedPrice}. Valor fechado!`;
+            const msgRes = await pool.query(`INSERT INTO chat_messages (session_id, sender_id, texto, is_system) VALUES ($1, NULL, $2, true) RETURNING id, timestamp`, [id, sysMsg]);
+            const newMsg = msgRes.rows[0];
+            io.to(`chat_${id}`).emit('new_message', { 
+                id: newMsg.id, senderId: 0, text: sysMsg, 
+                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                isSystem: true, type: 'text' 
+            });
+        }
+        return res.json({ success: true, negotiation: neg });
+    } catch (err) { res.status(500).json({ error: 'Erro ao aceitar valor' }); }
+});
+
+app.post('/api/chats/:id/negotiate/reject', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+        const chatRes = await pool.query('SELECT negotiation FROM chat_sessions WHERE id = $1', [id]);
+        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado' });
+        
+        const neg = chatRes.rows[0].negotiation;
+        if (!neg || neg.status !== 'pending') {
+            return res.status(400).json({ error: 'Não há proposta pendente' });
+        }
+        
+        neg.status = 'rejected';
+        await pool.query('UPDATE chat_sessions SET negotiation = $1 WHERE id = $2', [JSON.stringify(neg), id]);
+        
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`chat_${id}`).emit('proposal_update', { chatId: id });
+            
+            const sysMsg = `${req.user.nome} recusou o valor proposto.`;
+            const msgRes = await pool.query(`INSERT INTO chat_messages (session_id, sender_id, texto, is_system) VALUES ($1, NULL, $2, true) RETURNING id, timestamp`, [id, sysMsg]);
+            const newMsg = msgRes.rows[0];
+            io.to(`chat_${id}`).emit('new_message', { 
+                id: newMsg.id, senderId: 0, text: sysMsg, 
+                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                isSystem: true, type: 'text' 
+            });
+        }
+        return res.json({ success: true, negotiation: neg });
+    } catch (err) { res.status(500).json({ error: 'Erro ao recusar valor' }); }
 });
 
 app.post('/api/messages', authenticate, async (req: any, res) => {
@@ -1662,38 +1570,34 @@ app.get('/api/gamification', authenticate, async (req: any, res) => {
         let rating = 5.0;
         let unlockedBadges: string[] = [];
 
-        if (isDbConnected) {
-            const result = await pool.query('SELECT xp, rating FROM users WHERE id = $1', [req.user.id]);
-            xp = result.rows[0]?.xp || 0;
-            rating = parseFloat(result.rows[0]?.rating || 5.0);
-            const badgesRes = await pool.query(`SELECT badge_id FROM user_badges WHERE user_id = $1`, [req.user.id]);
-            unlockedBadges = badgesRes.rows.map((r: any) => r.badge_id);
-        } else {
-            const user = MEMORY_USERS.find(u => u.id === req.user.id);
-            xp = user?.xp || 0;
-            rating = user?.rating || 5.0;
-            // Mock badges logic for memory users
-            if (xp > 0) unlockedBadges.push('1'); // Cadastro
-            if (xp > 500) unlockedBadges.push('2'); // Primeiro serviço
-            if (user?.rating === 5) unlockedBadges.push('3'); // 5 estrelas
+        if (!isDbConnected) {
+            return res.json({
+                level: 1,
+                nextLevel: 2,
+                progress: 0,
+                xp: 0,
+                nextLevelXp: 100,
+                badges: [],
+                benefits: [],
+                capReason: null
+            });
         }
+
+        const result = await pool.query('SELECT xp, rating FROM users WHERE id = $1', [req.user.id]);
+        xp = result.rows[0]?.xp || 0;
+        rating = parseFloat(result.rows[0]?.rating || 5.0);
+        const badgesRes = await pool.query(`SELECT badge_id FROM user_badges WHERE user_id = $1`, [req.user.id]);
+        unlockedBadges = badgesRes.rows.map((r: any) => r.badge_id);
 
         const { level, nextLevel, nextLevelXp, progress, capReason } = calculateLevel(xp, rating);
         
         // Merge default badges with unlocked status
         let badgesList = [];
-        if (isDbConnected) {
-             const allBadges = await pool.query('SELECT * FROM badges');
-             badgesList = allBadges.rows.map((b: any) => ({
-                 id: b.id, name: b.name, description: b.description, icon: b.icon,
-                 unlocked: unlockedBadges.includes(b.id)
-             }));
-        } else {
-             badgesList = DEFAULT_BADGES.map(b => ({
-                 ...b,
-                 unlocked: unlockedBadges.includes(b.id)
-             }));
-        }
+        const allBadges = await pool.query('SELECT * FROM badges');
+        badgesList = allBadges.rows.map((b: any) => ({
+            id: b.id, name: b.name, description: b.description, icon: b.icon,
+            unlocked: unlockedBadges.includes(b.id)
+        }));
 
         return res.json({ 
             currentLevel: level, 
@@ -1709,24 +1613,6 @@ app.get('/api/gamification', authenticate, async (req: any, res) => {
         console.error(err);
         res.status(500).json({ error: 'Erro na gamificação' }); 
     }
-});
-
-
-
-// Rota de Debug para adicionar XP manualmente (útil para testes)
-app.post('/api/debug/add-xp', authenticate, async (req: any, res) => {
-    const { amount } = req.body;
-    const xpToAdd = parseInt(amount) || 100;
-    
-    try {
-        if (isDbConnected) {
-            await pool.query('UPDATE users SET xp = xp + $1 WHERE id = $2', [xpToAdd, req.user.id]);
-        } else {
-            const user = MEMORY_USERS.find(u => u.id === req.user.id);
-            if (user) user.xp = (user.xp || 0) + xpToAdd;
-        }
-        return res.json({ success: true, message: `${xpToAdd} XP adicionado!` });
-    } catch { res.status(500).json({ error: 'Erro ao adicionar XP' }); }
 });
 
 app.get('/api/notifications', authenticate, async (req: any, res) => {
@@ -1751,13 +1637,7 @@ app.put('/api/notifications/:id/read', authenticate, async (req: any, res) => {
 
 app.get('/api/wallet', authenticate, async (req: any, res) => {
     if (!isDbConnected) {
-        return res.json({ 
-            balance: 1250.00, 
-            transactions: [
-                { id: '1', type: 'INCOME', amount: 500.00, description: 'Serviço de Pintura (Mock)', date: new Date().toISOString(), status: 'COMPLETED' },
-                { id: '2', type: 'INCOME', amount: 750.00, description: 'Instalação Elétrica (Mock)', date: new Date(Date.now() - 86400000).toISOString(), status: 'COMPLETED' }
-            ] 
-        });
+        return res.json({ balance: 0, transactions: [] });
     }
     try {
         const transRes = await pool.query('SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
@@ -1773,19 +1653,13 @@ app.get('/api/admin/stats', authenticate, async (req: any, res) => {
         try {
             const usersCount = (await pool.query('SELECT COUNT(*) FROM users')).rows[0].count;
             const jobsCount = (await pool.query("SELECT COUNT(*) FROM propostas WHERE status = 'OPEN'")).rows[0].count;
-            return res.json({ totalUsers: parseInt(usersCount), activeJobs: parseInt(jobsCount), revenue: 12500.00, onlineUsers: 42 });
+            return res.json({ totalUsers: parseInt(usersCount), activeJobs: parseInt(jobsCount), revenue: 0, onlineUsers: 0 });
         } catch (e) {
             console.error(e);
             return res.status(500).json({ error: 'Database error' });
         }
     } else {
-        // Mock Data
-        return res.json({ 
-            totalUsers: MEMORY_USERS.length, 
-            activeJobs: 5, 
-            revenue: 12500.00, 
-            onlineUsers: 42 
-        });
+        return res.json({ totalUsers: 0, activeJobs: 0, revenue: 0, onlineUsers: 0 });
     }
 });
 
@@ -1801,7 +1675,7 @@ app.get('/api/admin/users', authenticate, async (req: any, res) => {
             return res.status(500).json({ error: 'Database error' });
         }
     } else {
-        return res.json(MEMORY_USERS.map(mapUserToFrontend));
+        return res.json([]);
     }
 });
 
@@ -1885,60 +1759,11 @@ app.delete('/api/admin/services/:id', authenticate, async (req: any, res) => {
     }
 });
 
-app.post('/api/admin/demo-promote', authenticate, async (req: any, res) => {
-    try {
-        if (isDbConnected) {
-            await pool.query("UPDATE users SET role = 'ADMIN' WHERE id = $1", [req.user.id]);
-        } else {
-            const user = MEMORY_USERS.find(u => u.id === req.user.id);
-            if (user) user.role = 'ADMIN';
-        }
-        return res.json({ success: true });
-    } catch { res.status(500).json({ error: 'Erro ao promover para admin' }); }
-});
-
 app.post('/api/upload', upload.single('file'), async (req: any, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
-    // --- MOCK UPLOAD LOGIC FOR MVP ---
-    // If Cloudinary is not configured, return a realistic random image
     if (!process.env.CLOUDINARY_API_KEY) {
-        // Realistic avatars
-        const avatars = [
-            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&h=400&fit=crop',
-            'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop'
-        ];
-        
-        // Realistic portfolio/work images
-        const portfolioImages = [
-            'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&h=800&fit=crop', // Electrician
-            'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&h=800&fit=crop', // Wiring
-            'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&h=800&fit=crop', // Architecture
-            'https://images.unsplash.com/photo-1581578731117-104f8a746950?w=800&h=800&fit=crop', // Painting
-            'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&h=800&fit=crop', // Kitchen
-            'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&h=800&fit=crop', // Home Design
-            'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=800&h=800&fit=crop', // Computer Repair
-            'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=800&h=800&fit=crop'  // Appliance Repair
-        ];
-
-        // Simple heuristic: small files (< 100KB) might be avatars, or just random
-        // For better UX, we'll just pick from portfolio by default as it's more common
-        // But let's try to guess based on aspect ratio if we could, but we can't here.
-        // So we will return a random portfolio image 70% of the time, and avatar 30%.
-        // OR better: The frontend could send a 'type' field.
-        
-        const isAvatar = req.body.type === 'avatar';
-        const list = isAvatar ? avatars : portfolioImages;
-        const randomImage = list[Math.floor(Math.random() * list.length)];
-        
-        // Simulate network delay for realism
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        return res.json({ url: randomImage });
+        return res.status(500).json({ error: 'Cloudinary não configurado. Upload indisponível.' });
     }
 
     try {
@@ -2066,28 +1891,14 @@ app.get('/api/professional/stats', authenticate, async (req: any, res) => {
             });
 
         } else {
-            // Memory Fallback (Mock Data)
-            // We can return the same MOCK_PRO_STATS structure but maybe slightly randomized or based on memory user
-            const mockStats = {
-                totalEarningsMonth: 1250.00,
-                totalEarningsToday: 150.00,
-                completedJobsMonth: 12,
-                profileViews: 145,
-                chartData: [
-                    { day: 'Seg', value: 150, jobs: 1 },
-                    { day: 'Ter', value: 450, jobs: 3 },
-                    { day: 'Qua', value: 0, jobs: 0 },
-                    { day: 'Qui', value: 300, jobs: 2 },
-                    { day: 'Sex', value: 600, jobs: 4 },
-                    { day: 'Sáb', value: 1200, jobs: 5 },
-                    { day: 'Dom', value: 0, jobs: 0 },
-                ],
-                recentReviews: [
-                    { id: 101, proposalId: 1, reviewerId: 50, targetId: req.user.id, reviewerName: "Mariana S.", rating: 5, comment: "Excelente profissional!", createdAt: new Date().toISOString() },
-                    { id: 102, proposalId: 2, reviewerId: 51, targetId: req.user.id, reviewerName: "Carlos B.", rating: 4, comment: "Bom trabalho, chegou no horário.", createdAt: new Date().toISOString() }
-                ]
-            };
-            return res.json(mockStats);
+            return res.json({
+                totalEarningsMonth: 0,
+                totalEarningsToday: 0,
+                completedJobsMonth: 0,
+                profileViews: 0,
+                chartData: [],
+                recentReviews: []
+            });
         }
     } catch (err) {
         console.error(err);
@@ -2118,11 +1929,12 @@ async function initDB() {
             await client.query(`CREATE TABLE IF NOT EXISTS categories (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100) NOT NULL, image_url TEXT);`);
             await client.query(`CREATE TABLE IF NOT EXISTS services (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50) REFERENCES categories(id), name VARCHAR(100) NOT NULL, emoji VARCHAR(10), image_url TEXT, is_active BOOLEAN DEFAULT TRUE);`);
             await client.query(`CREATE TABLE IF NOT EXISTS propostas (id SERIAL PRIMARY KEY, contratante_id INTEGER REFERENCES users(id), profissional_id INTEGER REFERENCES users(id), titulo VARCHAR(255) NOT NULL, descricao TEXT, area_tag VARCHAR(100), localizacao VARCHAR(255), orcamento_estimado VARCHAR(100), target_professional_id INTEGER REFERENCES users(id), latitude DECIMAL(10,8), longitude DECIMAL(11,8), status VARCHAR(50) DEFAULT 'OPEN', data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP, data_conclusao TIMESTAMP, accepted_count INTEGER DEFAULT 0);`);
-            await client.query(`CREATE TABLE IF NOT EXISTS chat_sessions (id SERIAL PRIMARY KEY, proposta_id INTEGER REFERENCES propostas(id), professional_id INTEGER REFERENCES users(id), criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-            // Migration: Ensure professional_id exists for existing tables
+            await client.query(`CREATE TABLE IF NOT EXISTS chat_sessions (id SERIAL PRIMARY KEY, proposta_id INTEGER REFERENCES propostas(id), professional_id INTEGER REFERENCES users(id), negotiation JSONB, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+            // Migration: Ensure professional_id and negotiation exist for existing tables
             try {
                 await client.query(`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS professional_id INTEGER REFERENCES users(id);`);
-            } catch (e) { console.log('Migration note: professional_id column check', e); }
+                await client.query(`ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS negotiation JSONB;`);
+            } catch (e) { console.log('Migration note: chat_sessions columns check', e); }
 
             try {
                 await client.query(`ALTER TABLE propostas ADD COLUMN IF NOT EXISTS accepted_count INTEGER DEFAULT 0;`);
@@ -2161,18 +1973,6 @@ async function initDB() {
             await client.query('DELETE FROM services');
             await client.query('DELETE FROM categories');
             await client.query('DELETE FROM badges');
-
-            // Use parameterized query for safer and correct seeding
-            const insertUserQuery = `
-                INSERT INTO users (id, nome, email, senha_hash, role, avatar_url, specialty, rating, reviews_count, localizacao, latitude, longitude, xp, status) 
-                VALUES 
-                (901, 'Marcos Dev', 'marcos@linka.com', $1, 'PROFESSIONAL', 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d', 'Desenvolvedor Web', 5.0, 89, 'Vila Madalena', -23.5489, -46.6860, 5000, 'ACTIVE'),
-                (902, 'Ana Tech', 'ana@linka.com', $1, 'PROFESSIONAL', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', 'Suporte Técnico', 4.8, 210, 'Pinheiros', -23.5663, -46.6924, 3000, 'ACTIVE'),
-                (903, 'Jane Demo', 'jane@linka.com', $1, 'CONTRACTOR', 'https://i.pravatar.cc/150?u=jane', NULL, 5.0, 0, 'São Paulo', -23.55, -46.63, 0, 'ACTIVE'),
-                (904, 'João Demo', 'joao@linka.com', $1, 'PROFESSIONAL', 'https://i.pravatar.cc/150?u=joao', 'Eletricista', 4.9, 15, 'São Paulo', -23.55, -46.63, 1000, 'ACTIVE') 
-                ON CONFLICT (id) DO UPDATE SET senha_hash = EXCLUDED.senha_hash;
-            `;
-            await client.query(insertUserQuery, [validHash]);
 
             // Ensure Admin User
             const adminHash = await bcrypt.hash('admin123', 10);
@@ -2246,48 +2046,6 @@ async function initDB() {
     }
 }
 
-
-app.post('/api/seed', async (_req, res) => {
-    if (!isDbConnected) return res.status(503).json({ error: 'DB not connected' });
-    try {
-        // Check if proposals exist
-        const check = await pool.query('SELECT count(*) FROM propostas');
-        if (parseInt(check.rows[0].count) > 0) return res.json({ message: 'Proposals already exist' });
-
-        // Create a dummy contractor
-        let contractorId;
-        const contractorRes = await pool.query("SELECT id FROM users WHERE role = 'CONTRACTOR' LIMIT 1");
-        if ((contractorRes.rowCount || 0) > 0) {
-            contractorId = contractorRes.rows[0].id;
-        } else {
-            const hash = await bcrypt.hash('123456', 10);
-            const newC = await pool.query("INSERT INTO users (nome, email, senha_hash, role, localizacao) VALUES ('Cliente Teste', 'cliente@teste.com', $1, 'CONTRACTOR', 'São Paulo, SP') RETURNING id", [hash]);
-            contractorId = newC.rows[0].id;
-        }
-
-        const proposals = [
-            { title: 'Instalação de Chuveiro', desc: 'Preciso instalar um chuveiro elétrico novo.', tag: 'Eletricista', budget: '100-200' },
-            { title: 'Pintura de Sala', desc: 'Pintar uma sala de 20m2, tinta branca.', tag: 'Pintor', budget: '300-500' },
-            { title: 'Conserto de Vazamento', desc: 'Pia da cozinha vazando muito.', tag: 'Encanador', budget: '150-250' },
-            { title: 'Montagem de Móveis', desc: 'Montar um guarda-roupa de 3 portas.', tag: 'Montador', budget: '200-300' },
-            { title: 'Limpeza Pós-Obra', desc: 'Limpeza pesada após reforma no banheiro.', tag: 'Diarista', budget: '200-400' },
-            { title: 'Aula de Yoga', desc: 'Busco instrutor para aulas particulares em casa.', tag: 'Instrutor de Yoga', budget: '100-150' },
-            { title: 'Manutenção de Ar Condicionado', desc: 'Limpeza e gás de split 9000btus.', tag: 'Refrigeração', budget: '150-250' }
-        ];
-
-        for (const p of proposals) {
-            await pool.query(
-                "INSERT INTO propostas (contratante_id, titulo, descricao, area_tag, orcamento_estimado, status, latitude, longitude) VALUES ($1, $2, $3, $4, $5, 'OPEN', -23.55, -46.63)",
-                [contractorId, p.title, p.desc, p.tag, p.budget]
-            );
-        }
-
-        res.json({ message: 'Seeded successfully' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: 'Seed failed' });
-    }
-});
 
 async function startServer() {
     await initDB();

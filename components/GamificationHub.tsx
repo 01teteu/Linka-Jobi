@@ -71,30 +71,8 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ user, onBack }) => {
         return <Award size={24} />;
     };
 
-    const addDebugXp = async () => {
-        try {
-            setLoading(true);
-            await fetch('/api/debug/add-xp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ amount: 500 })
-            });
-            // Reload data
-            const [gamiData, profileData] = await Promise.all([
-                Backend.getUserGamification(user.id, user.role),
-                Backend.getPublicProfile(user.id)
-            ]);
-            setData(gamiData);
-            setReviews(profileData.reviews || []);
-            setLoading(false);
-        } catch (e) {
-            console.error(e);
-            setLoading(false);
-        }
-    };
-
     return (
-        <div className="max-w-xl mx-auto px-6 py-8 pb-32 animate-fade-in-up">
+        <div className="w-full px-6 py-8 pb-32 animate-fade-in-up">
             <header className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
@@ -102,10 +80,6 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ user, onBack }) => {
                     </button>
                     <h2 className="text-2xl font-extrabold text-textMain">Linka Club</h2>
                 </div>
-                {/* Debug Button */}
-                <button onClick={addDebugXp} className="text-[10px] bg-gray-100 px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-200">
-                    +500 XP (Debug)
-                </button>
             </header>
 
             {/* TABS */}

@@ -50,7 +50,7 @@ async function setup() {
         console.log("⚠️  AVISO: Não foi possível conectar ao banco de dados externo.");
         console.log(`📝 Detalhe: ${err.message}`);
         console.log("------------------------------------------------");
-        console.log("🟢 NÃO SE PREOCUPE! O Linka Jobi ativou o MODO DEMONSTRAÇÃO.");
+        console.log("🟢 O Linka Jobi ativou o MODO OFFLINE/MEMÓRIA.");
         console.log("   O site funcionará usando dados locais simulados.");
         console.log("------------------------------------------------");
         console.log("👉 Próximo passo: Rode 'npm run dev' para abrir o site.");
