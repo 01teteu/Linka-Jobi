@@ -162,10 +162,10 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
     : "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=1920&auto=format&fit=crop";
 
   return (
-    <div className="flex-1 w-full relative flex flex-col justify-end bg-primary overflow-hidden font-sans">
+    <div className="flex-1 w-full relative flex flex-col bg-gray-50 overflow-hidden font-sans">
         
         {/* Immersive Background */}
-        <div className="absolute inset-0 z-0">
+        <div className="absolute top-0 left-0 w-full h-[35vh] z-0 bg-primary">
             <motion.img 
                 key={bgImage}
                 initial={{ opacity: 0, scale: 1.05 }}
@@ -173,7 +173,7 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 transition={{ duration: 1.5, ease: "easeOut" }}
                 src={bgImage}
                 className="w-full h-full object-cover mix-blend-overlay"
-                alt="Background"
+                alt=""
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primaryDark via-primary/80 to-transparent" />
         </div>
@@ -183,14 +183,14 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="relative z-10 w-full bg-white rounded-t-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]"
+            className="relative z-10 w-full bg-white rounded-t-[2.5rem] shadow-2xl flex flex-col mt-[25vh] flex-1 overflow-hidden"
         >
             {/* Mobile Drag Handle Indicator */}
-            <div className="w-full flex justify-center pt-4 pb-2 sm:hidden">
+            <div className="w-full flex justify-center pt-4 pb-2 sm:hidden shrink-0">
                 <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
             </div>
 
-            <div className="px-6 pb-10 sm:p-8 overflow-y-auto custom-scrollbar">
+            <div className="px-6 pb-10 sm:p-8 overflow-y-auto custom-scrollbar flex-1">
                 
                 {/* Header */}
                 <div className="mb-6">

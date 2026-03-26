@@ -53,22 +53,20 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
       if (value.length === 8) {
           setIsCepLoading(true);
           try {
-              const response = await fetch(`https://viacep.com.br/ws/${value}/json/`);
+              const response = await fetch(`/api/cep/${value}`);
+              if (!response.ok) throw new Error('CEP não encontrado');
               const data = await response.json();
-              if (data.erro) {
-                  setCepError('CEP não encontrado');
-              } else {
-                  setFormData(prev => ({
-                      ...prev,
-                      street: data.logradouro || '',
-                      neighborhood: data.bairro || '',
-                      city: data.localidade || '',
-                      state: data.uf || '',
-                      location: `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`
-                  }));
-              }
+              
+              setFormData(prev => ({
+                  ...prev,
+                  street: data.street || '',
+                  neighborhood: data.neighborhood || '',
+                  city: data.city || '',
+                  state: data.state || '',
+                  location: data.street ? `${data.street}, ${data.neighborhood}, ${data.city} - ${data.state}` : data.cidade || ''
+              }));
           } catch (error) {
-              setCepError('Erro ao buscar CEP');
+              setCepError('CEP não encontrado ou erro na busca');
           } finally {
               setIsCepLoading(false);
           }

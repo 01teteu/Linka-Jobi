@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Proposal, ProposalStatus, AdminStats, ProfessionalDashboardStats, ServiceCategory, ServiceSubItem, ChatSession, Notification } from './types';
-import { Backend } from './services/mockBackend'; 
+import { Backend, getCookie } from './services/mockBackend'; 
 import { useToast } from './components/ToastContext';
 import ProposalCard from './components/ProposalCard';
 import CreateProposalModal from './components/CreateProposalModal';
@@ -30,6 +30,7 @@ import {
   ChevronLeft, SlidersHorizontal, Hourglass, Radar
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { motion } from 'framer-motion';
 
 const PAGE_SIZE = 10;
 
@@ -97,7 +98,7 @@ const App: React.FC = () => {
         try {
             await new Promise(r => setTimeout(r, 800));
             // Try to seed database silently
-            fetch('/api/seed', { method: 'POST' }).catch(() => {});
+            Backend.seedDatabase().catch(() => {});
             
             const session = await Backend.init();
             if (session && session.user) {
@@ -636,8 +637,15 @@ const App: React.FC = () => {
                             <Radar className="text-primary animate-pulse" size={20} /> Pedidos em Aberto
                         </h3>
                         <div className="space-y-4">
-                            {myProposals.map(p => (
-                                <div key={p.id} onClick={() => setViewProposal(p)} className="relative bg-white p-5 rounded-[1.5rem] border border-gray-100 shadow-card hover:shadow-float transition-all group overflow-hidden cursor-pointer active:scale-[0.98]">
+                            {myProposals.map((p, index) => (
+                                <motion.div 
+                                    key={p.id} 
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                                    onClick={() => setViewProposal(p)} 
+                                    className="relative bg-white p-5 rounded-[1.5rem] border border-gray-100 shadow-card hover:shadow-float transition-all group overflow-hidden cursor-pointer active:scale-[0.98]"
+                                >
                                     {/* Linha de Status Lateral */}
                                     <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
                                     
@@ -673,7 +681,7 @@ const App: React.FC = () => {
                                             <ChevronRight size={16} />
                                         </button>
                                     </div>
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     </div>

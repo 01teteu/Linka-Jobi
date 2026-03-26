@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
-import { X, Camera, Save, User as UserIcon, MapPin, Phone, HelpCircle, FileText, ChevronRight, LogOut, Loader2, UploadCloud, ShieldCheck } from 'lucide-react';
+import { X, Camera, Save, User as UserIcon, MapPin, Phone, HelpCircle, FileText, ChevronRight, LogOut, Loader2, UploadCloud, ShieldCheck, Mail, CheckCircle2, AlertCircle, Send } from 'lucide-react';
 import { Backend } from '../services/mockBackend';
 
 interface SettingsModalProps {
@@ -16,6 +16,9 @@ interface SettingsModalProps {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, onUpdateUser, onLogout, onContactSupport }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [emailStatus, setEmailStatus] = useState<any>(null);
+    const [isTestingEmail, setIsTestingEmail] = useState(false);
+    const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [formData, setFormData] = useState({
@@ -35,8 +38,46 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                 bio: user.bio || '',
                 avatarUrl: user.avatarUrl || ''
             });
+            fetchEmailStatus();
         }
     }, [isOpen, user]);
+
+    const fetchEmailStatus = async () => {
+        try {
+            const res = await fetch('/api/health');
+            const data = await res.json();
+            setEmailStatus(data.email);
+        } catch (err) {
+            console.error("Failed to fetch email status", err);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        if (!user.email) return;
+        setIsTestingEmail(true);
+        setTestEmailResult(null);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/debug/test-email', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ email: user.email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setTestEmailResult('success');
+            } else {
+                setTestEmailResult(data.error || 'Erro desconhecido');
+            }
+        } catch (err: any) {
+            setTestEmailResult(err.message || 'Erro de conexão');
+        } finally {
+            setIsTestingEmail(false);
+        }
+    };
 
     const handleSave = async () => {
         setIsLoading(true);
@@ -180,6 +221,63 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
 
                     {/* Support & Actions */}
                     <div className="pt-4 border-t border-gray-100 space-y-3">
+                        {/* Email Status Section */}
+                        <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Mail size={16} className="text-secondaryMuted" />
+                                    <span className="text-xs font-black uppercase text-textMuted tracking-wider">Status do E-mail</span>
+                                </div>
+                                {emailStatus?.initialized ? (
+                                    <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                                        <CheckCircle2 size={10} /> Ativo
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                                        <AlertCircle size={10} /> Inativo
+                                    </div>
+                                )}
+                            </div>
+
+                            {emailStatus?.error && (
+                                <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                                    <p className="text-[10px] font-bold text-red-700 leading-tight">
+                                        {emailStatus.error === 'Gmail App Password Required' 
+                                            ? '⚠️ Erro: O Gmail exige uma "Senha de App". Use as configurações de Segredos do AI Studio para corrigir.' 
+                                            : `⚠️ Erro: ${emailStatus.error}`}
+                                    </p>
+                                    {emailStatus.error === 'Gmail App Password Required' && (
+                                        <a 
+                                            href="https://myaccount.google.com/apppasswords" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-red-600 underline mt-1 block font-bold"
+                                        >
+                                            Gerar Senha de App →
+                                        </a>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-[11px] font-medium text-secondaryMuted">
+                                <span>Provedor: <span className="font-bold text-secondary">{emailStatus?.provider || 'Desconhecido'}</span></span>
+                                <button 
+                                    onClick={handleTestEmail}
+                                    disabled={isTestingEmail || !emailStatus?.initialized}
+                                    className="flex items-center gap-1.5 text-primary hover:text-primaryDark font-bold transition-colors disabled:opacity-50"
+                                >
+                                    {isTestingEmail ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                    Testar Envio
+                                </button>
+                            </div>
+
+                            {testEmailResult && (
+                                <div className={`text-[10px] font-bold p-2 rounded-lg ${testEmailResult === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {testEmailResult === 'success' ? '✅ E-mail de teste enviado com sucesso!' : `❌ Falha: ${testEmailResult}`}
+                                </div>
+                            )}
+                        </div>
+
                         <button onClick={handleContactSupport} className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-2xl transition-colors group">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 bg-blue-100 group-hover:bg-white rounded-full flex items-center justify-center text-blue-600">

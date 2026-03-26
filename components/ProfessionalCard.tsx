@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { motion } from 'framer-motion';
 import { User } from '../types';
 import { MapPin, Star, ChevronRight } from 'lucide-react';
 
@@ -10,7 +11,13 @@ interface ProfessionalCardProps {
 
 const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional, onViewProfile }) => {
   return (
-    <div className="min-w-[180px] w-[180px] bg-white p-4 rounded-[2rem] border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center overflow-hidden">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="min-w-[180px] w-[180px] bg-white p-4 rounded-[2rem] border border-gray-100 shadow-sm group hover:shadow-lg transition-all flex flex-col items-center overflow-hidden"
+    >
       <div className="absolute top-3 right-3 bg-yellow-400 text-white text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 shadow-sm z-10">
         <Star size={8} fill="currentColor" /> {professional.rating || '5.0'}
       </div>
@@ -34,7 +41,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional, onVie
             Ver Perfil <ChevronRight size={10} />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

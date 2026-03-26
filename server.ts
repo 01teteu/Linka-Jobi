@@ -11,6 +11,12 @@ import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import nodemailer from 'nodemailer';
+import cron from 'node-cron';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import timeout from 'connect-timeout';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 import { DEFAULT_CATEGORIES, DEFAULT_SERVICES } from './constants';
 
 dotenv.config();
@@ -19,6 +25,7 @@ const app = express();
 app.set('trust proxy', 1); // Trust first proxy for rate limiting
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'segredo_super_secreto_linka_jobi_2024';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'segredo_refresh_super_secreto_linka_jobi_2024';
 const DB_CONNECTION = process.env.DATABASE_URL;
 const GOOGLE_API_KEY = process.env.API_KEY || process.env.VITE_GOOGLE_API_KEY;
 
@@ -40,10 +47,19 @@ const pool = new Pool({
 // --- EMAIL SERVICE ---
 let transporter: nodemailer.Transporter;
 let io: Server;
+let emailStatus = {
+    initialized: false,
+    provider: 'none',
+    error: null as string | null,
+    user: null as string | null
+};
 
 const initEmail = async () => {
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.SMTP_PORT || '465');
+    const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
 
     const setupEthereal = async () => {
         try {
@@ -57,9 +73,16 @@ const initEmail = async () => {
                     pass: testAccount.pass,
                 },
             });
+            emailStatus = {
+                initialized: true,
+                provider: 'ethereal',
+                error: null,
+                user: testAccount.user
+            };
             console.log('📧 Ethereal Email initialized');
             console.log('📧 Preview URL: https://ethereal.email/messages');
         } catch (err) {
+            emailStatus.error = 'Failed to create Ethereal account';
             console.error('❌ Failed to create Ethereal account', err);
         }
     };
@@ -67,16 +90,33 @@ const initEmail = async () => {
     if (user && pass) {
         try {
             const tempTransporter = nodemailer.createTransport({
-                host: 'smtp.gmail.com',
-                port: 465,
-                secure: true,
+                host,
+                port,
+                secure,
                 auth: { user, pass }
             });
             await tempTransporter.verify();
             transporter = tempTransporter;
-            console.log(`📧 SMTP Email initialized (Gmail 465) for ${user}`);
+            emailStatus = {
+                initialized: true,
+                provider: host.includes('gmail') ? 'gmail' : 'custom',
+                error: null,
+                user
+            };
+            console.log(`📧 SMTP Email initialized (${host}:${port}) for ${user}`);
         } catch (err) {
-            console.error(`❌ SMTP Email verification failed for ${user}. Falling back to Ethereal. Error:`, err);
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            const isGmail = host.includes('gmail.com') || (user && user.endsWith('@gmail.com'));
+            
+            if (isGmail && (errorMsg.includes('535-5.7.8') || errorMsg.includes('Invalid login'))) {
+                emailStatus.error = 'Gmail App Password Required';
+                console.error(`❌ SMTP Authentication Failed for ${user}: Gmail requires an "App Password" (not your regular password).`);
+                console.error(`👉 Create one here: https://myaccount.google.com/apppasswords`);
+                console.error(`👉 Make sure 2FA is enabled on your Google account first.`);
+            } else {
+                emailStatus.error = errorMsg;
+                console.error(`❌ SMTP Email verification failed for ${user}. Falling back to Ethereal. Error:`, err);
+            }
             await setupEthereal();
         }
     } else {
@@ -93,8 +133,9 @@ const sendEmail = async (to: string, subject: string, html: string) => {
         return;
     }
     try {
+        const from = process.env.SMTP_FROM || (process.env.SMTP_USER ? `"Linka Jobi" <${process.env.SMTP_USER}>` : '"Linka Jobi" <noreply@linkajobi.com>');
         const info = await transporter.sendMail({
-            from: process.env.SMTP_FROM || `"Linka Jobi" <${process.env.SMTP_USER}>`,
+            from,
             to,
             subject,
             html,
@@ -194,6 +235,93 @@ if (GOOGLE_API_KEY) { aiClient = new GoogleGenAI({ apiKey: GOOGLE_API_KEY }); }
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
+// Global timeout (except for upload)
+app.use((req: any, res: any, next: any) => {
+    if (req.path === '/api/upload') {
+        return next();
+    }
+    timeout('30s')(req, res, next);
+});
+
+// Timeout handler
+app.use((req: any, res: any, next: any) => {
+    if (!req.timedout) next();
+});
+
+// Helmet configuration
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            // For Vite SPA, we need unsafe-inline for scripts injected during dev
+            // and potentially for some dynamic imports in production.
+            // A stricter approach would require generating a manifest of hashes during build.
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.tailwindcss.com"],
+            // Vite injects styles via JS using inline style tags, making unsafe-inline necessary
+            // unless we extract all CSS to a file during build and only link that file.
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
+            imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://ui-avatars.com", "https://*.tile.openstreetmap.org", "https://images.unsplash.com", "https://plus.unsplash.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            connectSrc: ["'self'"],
+        },
+    },
+    frameguard: { action: 'deny' },
+    xssFilter: true,
+    referrerPolicy: { policy: 'no-referrer' },
+}));
+
+app.use((req, res, next) => {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+});
+
+app.disable('x-powered-by');
+
+// CSRF Token Endpoint
+app.get('/api/auth/csrf-token', (req: any, res: any) => {
+    const token = crypto.randomUUID();
+    res.cookie('csrf-token', token, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    });
+    res.json({ success: true });
+});
+
+// Custom CSRF Middleware (Double Submit Cookie)
+const csrfMiddleware = (req: any, res: any, next: any) => {
+    // Skip CSRF check for safe methods
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+        return next();
+    }
+    
+    // Exclude login and register from CSRF
+    if (req.path === '/api/login' || req.path === '/api/register') {
+        return next();
+    }
+
+    const cookieToken = req.cookies['csrf-token'];
+    const headerToken = req.headers['x-csrf-token'];
+
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+        return res.status(403).json({ error: 'Token CSRF inválido' });
+    }
+
+    next();
+};
+
+// Apply CSRF to all routes
+app.use(csrfMiddleware);
+
+// Error handler for Timeout
+app.use((err: any, req: any, res: any, next: any) => {
+    if (req.timedout) {
+        return res.status(408).json({ error: 'Tempo de requisição esgotado' });
+    }
+    next(err);
+});
+
 const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
 
 
@@ -245,55 +373,119 @@ function mapUserToFrontend(u: any) {
     };
 }
 
-function mapProposalToFrontend(p: any) {
+function mapPublicUserToFrontend(u: any) {
+    if (!u) return null;
+    return {
+        id: u.id, name: u.nome, role: u.role,
+        avatarUrl: u.avatar_url, location: u.localizacao, status: u.status,
+        bio: u.bio, specialty: u.specialty, 
+        coordinates: { lat: u.latitude, lng: u.longitude },
+        isSubscriber: u.is_subscriber,
+        rating: u.rating ? parseFloat(u.rating) : 5.0,
+        reviewsCount: u.reviews_count || 0,
+        experienceYears: u.xp ? Math.floor(u.xp / 100).toString() : '1',
+        portfolio: u.portfolio || [],
+        services: u.services || []
+    };
+}
+
+function mapProposalToFrontend(p: any, currentUserId?: number) {
+    const isOwner = currentUserId === p.contratante_id;
+    const isAssignedPro = currentUserId === p.profissional_id;
+    const canSeeContact = isOwner || isAssignedPro;
+
     return {
         id: p.id, contractorId: p.contratante_id, contractorName: p.contractor_name || 'Usuário',
         title: p.titulo, description: p.descricao, areaTag: p.area_tag, status: p.status,
         location: p.localizacao, budgetRange: p.orcamento_estimado, createdAt: p.data_criacao,
         contractorAvatar: p.contractor_avatar, professionalId: p.profissional_id,
-        contractorEmail: p.contractor_email, contractorPhone: p.contractor_phone,
+        contractorEmail: canSeeContact ? p.contractor_email : undefined,
+        contractorPhone: canSeeContact ? p.contractor_phone : undefined,
         acceptedByCount: p.accepted_count || 0,
         contractorRating: p.contractor_rating ? parseFloat(p.contractor_rating) : 5.0,
         contractorReviewsCount: p.contractor_reviews_count || 0
     };
 }
 
-// ✅ CEP → Coordenadas via BrasilAPI
+// ✅ CEP → Coordenadas via BrasilAPI com Fallback para ViaCEP
 async function getCoordinatesFromCep(cep: string) {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return null;
+
     try {
-        const cleanCep = cep.replace(/\D/g, '');
-        if (cleanCep.length !== 8) return null;
+        console.log(`🔍 Buscando CEP: ${cleanCep}`);
         
-        // Tenta v2 primeiro (com coordenadas)
-        const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanCep}`);
-        
-        if (response.ok) {
-            const data: any = await response.json();
-            return {
-                lat: data.location?.coordinates?.latitude ? parseFloat(data.location.coordinates.latitude) : null,
-                lng: data.location?.coordinates?.longitude ? parseFloat(data.location.coordinates.longitude) : null,
-                city: data.city,
-                state: data.state,
-                cidade: `${data.city}, ${data.state}`
-            };
+        // 1. Tenta BrasilAPI v2 (com coordenadas)
+        try {
+            const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cleanCep}`, {
+                headers: { 'User-Agent': 'LinkaJobi/1.0' }
+            });
+            
+            if (response.ok) {
+                const data: any = await response.json();
+                console.log(`✅ BrasilAPI v2 sucesso: ${data.city}`);
+                return {
+                    lat: data.location?.coordinates?.latitude ? parseFloat(data.location.coordinates.latitude) : null,
+                    lng: data.location?.coordinates?.longitude ? parseFloat(data.location.coordinates.longitude) : null,
+                    city: data.city,
+                    state: data.state,
+                    neighborhood: data.neighborhood || null,
+                    street: data.street || null,
+                    cidade: `${data.city}, ${data.state}`
+                };
+            }
+        } catch (e) {
+            console.warn('BrasilAPI v2 falhou, tentando v1...');
         }
 
-        // Fallback para v1 se v2 falhar (apenas endereço)
-        const responseV1 = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCep}`);
-        if (responseV1.ok) {
-            const dataV1: any = await responseV1.json();
-            return {
-                lat: null,
-                lng: null,
-                city: dataV1.city,
-                state: dataV1.state,
-                cidade: `${dataV1.city}, ${dataV1.state}`
-            };
+        // 2. Tenta BrasilAPI v1 (apenas endereço)
+        try {
+            const responseV1 = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCep}`, {
+                headers: { 'User-Agent': 'LinkaJobi/1.0' }
+            });
+            if (responseV1.ok) {
+                const dataV1: any = await responseV1.json();
+                console.log(`✅ BrasilAPI v1 sucesso: ${dataV1.city}`);
+                return {
+                    lat: null,
+                    lng: null,
+                    city: dataV1.city,
+                    state: dataV1.state,
+                    neighborhood: dataV1.neighborhood || null,
+                    street: dataV1.street || null,
+                    cidade: `${dataV1.city}, ${dataV1.state}`
+                };
+            }
+        } catch (e) {
+            console.warn('BrasilAPI v1 falhou, tentando ViaCEP...');
         }
 
+        // 3. Fallback para ViaCEP (extremamente estável)
+        try {
+            const responseVia = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+            if (responseVia.ok) {
+                const dataVia: any = await responseVia.json();
+                if (!dataVia.erro) {
+                    console.log(`✅ ViaCEP sucesso: ${dataVia.localidade}`);
+                    return {
+                        lat: null,
+                        lng: null,
+                        city: dataVia.localidade,
+                        state: dataVia.uf,
+                        neighborhood: dataVia.bairro || null,
+                        street: dataVia.logradouro || null,
+                        cidade: `${dataVia.localidade}, ${dataVia.uf}`
+                    };
+                }
+            }
+        } catch (e) {
+            console.error('ViaCEP falhou:', e);
+        }
+
+        console.warn(`❌ CEP ${cleanCep} não encontrado em nenhuma API.`);
         return null;
     } catch (e) { 
-        console.error('Erro ao buscar CEP:', e);
+        console.error('Erro crítico ao buscar CEP:', e);
         return null; 
     }
 }
@@ -311,11 +503,35 @@ app.get('/api/health', async (_req, res) => {
             // Test connection
             const c = await pool.connect(); 
             c.release(); 
-            res.json({ status: 'ok', db: 'connected', mode: 'PRODUCTION_DB' }); 
+            res.json({ status: 'ok', db: 'connected', mode: 'PRODUCTION_DB', email: emailStatus }); 
         } else { 
-            res.json({ status: 'ok', db: 'disconnected', mode: 'MOCK_MODE', usersInMemory: MEMORY_USERS.length }); 
+            res.json({ status: 'ok', db: 'disconnected', mode: 'MOCK_MODE', usersInMemory: MEMORY_USERS.length, email: emailStatus }); 
         }
     } catch (err: any) { res.status(500).json({ status: 'error', error: err.message }); }
+});
+
+app.post('/api/debug/test-email', authenticate, async (req: any, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    
+    if (req.user.role !== 'ADMIN' && req.user.email !== email) {
+        return res.status(403).json({ error: 'Acesso negado. Você só pode enviar e-mails de teste para si mesmo.' });
+    }
+    
+    try {
+        await sendEmail(email, 'Linka Jobi: Teste de Conexão', `
+            <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
+                <h2 style="color: #10b981;">Teste de E-mail</h2>
+                <p>Este é um e-mail de teste enviado para verificar a configuração do Linka Jobi.</p>
+                <p>Se você recebeu este e-mail, sua configuração SMTP está funcionando corretamente!</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                <p style="font-size: 12px; color: #666;">Provedor: ${emailStatus.provider} | Usuário: ${emailStatus.user}</p>
+            </div>
+        `);
+        res.json({ success: true, provider: emailStatus.provider });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to send test email' });
+    }
 });
 
 // ✅ CEP lookup
@@ -397,6 +613,55 @@ app.get('/api/debug/create-admin', async (_req, res) => {
         console.error(e);
         return res.status(500).json({ error: e.message });
     }
+});
+
+// --- AUTH ENDPOINTS ---
+app.post('/api/auth/refresh', async (req: any, res: any) => {
+    const refreshToken = req.cookies?.refreshToken;
+    if (!refreshToken) return res.status(401).json({ error: 'Refresh token ausente' });
+    
+    try {
+        if (isDbConnected) {
+            const result = await pool.query('SELECT * FROM invalidated_tokens WHERE token = $1', [refreshToken]);
+            if (result.rowCount && result.rowCount > 0) {
+                return res.status(403).json({ error: 'Token revogado' });
+            }
+        }
+        
+        const decoded: any = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+        
+        // Fetch user to get role and email
+        let user;
+        if (isDbConnected) {
+            const userRes = await pool.query('SELECT id, email, role FROM users WHERE id = $1', [decoded.id]);
+            user = userRes.rows[0];
+        } else {
+            user = MEMORY_USERS.find(u => u.id === decoded.id);
+        }
+        
+        if (!user) return res.status(403).json({ error: 'Usuário não encontrado' });
+        
+        const newAccessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+        res.json({ token: newAccessToken });
+    } catch (err) {
+        res.status(403).json({ error: 'Refresh token inválido ou expirado' });
+    }
+});
+
+app.post('/api/auth/logout', async (req: any, res: any) => {
+    const refreshToken = req.cookies?.refreshToken;
+    if (refreshToken && isDbConnected) {
+        try {
+            const decoded: any = jwt.verify(refreshToken, JWT_REFRESH_SECRET, { ignoreExpiration: true });
+            const expiresAt = new Date(decoded.exp * 1000);
+            await pool.query('INSERT INTO invalidated_tokens (token, expires_at) VALUES ($1, $2) ON CONFLICT (token) DO NOTHING', [refreshToken, expiresAt]);
+        } catch (err) {
+            console.error('Error invalidating token:', err);
+        }
+    }
+    
+    res.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+    res.json({ success: true, message: 'Logout realizado' });
 });
 
 // ✅ Login com validação (Híbrido DB/Memória)
@@ -484,7 +749,16 @@ app.post('/api/login', rateLimiter, async (req, res) => {
             user.services = servicesRes.rows.map((s: any) => ({ id: s.id.toString(), title: s.title, description: s.description, price: s.price, priceUnit: s.price_unit }));
         }
 
-        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+        const refreshToken = jwt.sign({ id: user.id }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+        
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+        
         return res.json({ token, user: mapUserToFrontend(user) });
     } catch (err) { 
         console.error('Login Error:', err); 
@@ -566,7 +840,15 @@ app.post('/api/register', rateLimiter, async (req, res) => {
         user.portfolio = [];
         user.services = [];
 
-        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+        const refreshToken = jwt.sign({ id: user.id }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+        
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
         
         // Send Welcome Email
         const welcomeHtml = `
@@ -761,7 +1043,7 @@ app.get('/api/favorites', authenticate, async (req: any, res) => {
             WHERE uf.user_id = $1`, 
             [req.user.id]
         );
-        return res.json(result.rows.map(mapUserToFrontend));
+        return res.json(result.rows.map(mapPublicUserToFrontend));
     } catch { res.status(500).json({ error: 'Erro ao buscar favoritos' }); }
 });
 
@@ -843,7 +1125,8 @@ app.post('/api/support/contact', authenticate, async (req: any, res) => {
             if ((supportRes.rowCount || 0) > 0) {
                 supportId = supportRes.rows[0].id;
             } else {
-                const hash = await bcrypt.hash('admin123', 10);
+                const randomPassword = require('crypto').randomBytes(32).toString('hex');
+                const hash = await bcrypt.hash(randomPassword, 10);
                 const newSupport = await pool.query(
                     `INSERT INTO users (nome, email, senha_hash, role, avatar_url, localizacao, latitude, longitude, bio) 
                      VALUES ('Suporte Linka Jobi', $1, $2, 'ADMIN', 'https://ui-avatars.com/api/?name=Suporte+Linka&background=0D8ABC&color=fff', 'Central de Suporte', 0, 0, 'Canal oficial de atendimento.') 
@@ -935,7 +1218,7 @@ app.get('/api/professionals/top', async (_req, res) => {
     try {
         const result = await pool.query(`SELECT * FROM users WHERE role = 'PROFESSIONAL' AND status = 'ACTIVE' ORDER BY rating DESC, reviews_count DESC LIMIT 10`);
         if (result.rowCount === 0) return res.json([]);
-        return res.json(result.rows.map(mapUserToFrontend));
+        return res.json(result.rows.map(mapPublicUserToFrontend));
     } catch { return res.json([]); }
 });
 
@@ -967,7 +1250,7 @@ app.get('/api/professionals/search', async (req: any, res) => {
         }
         query += ` ORDER BY rating DESC LIMIT 20`;
         const result = await pool.query(query, params);
-        return res.json(result.rows.map(mapUserToFrontend));
+        return res.json(result.rows.map(mapPublicUserToFrontend));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Erro na busca' }); }
 });
 
@@ -981,7 +1264,7 @@ app.get('/api/users/:id/public_profile', async (req, res) => {
         const servicesRes = await pool.query('SELECT * FROM user_services WHERE user_id = $1', [id]);
 
         return res.json({
-            user: mapUserToFrontend(userRes.rows[0]),
+            user: mapPublicUserToFrontend(userRes.rows[0]),
             portfolio: portfolioRes.rows.map((p: any) => ({ id: p.id, userId: p.user_id, imageUrl: p.image_url, description: p.descricao })),
             reviews: reviewsRes.rows.map((r: any) => ({ id: r.id, proposalId: r.proposta_id, reviewerId: r.avaliador_id, targetId: r.alvo_id, rating: r.nota, comment: r.comentario, createdAt: r.criado_em, reviewerName: r.reviewer_name })),
             services: servicesRes.rows.map((s: any) => ({ id: s.id.toString(), title: s.title, description: s.description, price: s.price, priceUnit: s.price_unit }))
@@ -1044,22 +1327,26 @@ app.get('/api/proposals', authenticate, async (req: any, res) => {
     
     try {
         const result = await pool.query(query, params);
-        return res.json(result.rows.map(mapProposalToFrontend));
+        return res.json(result.rows.map(p => mapProposalToFrontend(p, req.user?.id)));
     } catch (err) { console.error(err); return res.status(500).json({ error: 'Erro ao buscar propostas' }); }
 });
 
-app.get('/api/proposals/:id', authenticate, async (req, res) => {
+app.get('/api/proposals/:id', authenticate, async (req: any, res) => {
     if (!isDbConnected) {
         const p = MEMORY_PROPOSALS.find(p => p.id === Number(req.params.id));
         if (!p) return res.status(404).json({ error: 'Not found' });
-        return res.json(mapProposalToFrontend(p));
+        return res.json(mapProposalToFrontend(p, req.user?.id));
     }
-    const result = await pool.query(`SELECT p.*, u.nome as contractor_name, u.avatar_url as contractor_avatar, u.rating as contractor_rating, u.reviews_count as contractor_reviews_count FROM propostas p JOIN users u ON p.contratante_id = u.id WHERE p.id = $1`, [req.params.id]);
+    const result = await pool.query(`SELECT p.*, u.nome as contractor_name, u.avatar_url as contractor_avatar, u.email as contractor_email, u.telefone as contractor_phone, u.rating as contractor_rating, u.reviews_count as contractor_reviews_count FROM propostas p JOIN users u ON p.contratante_id = u.id WHERE p.id = $1`, [req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.json(mapProposalToFrontend(result.rows[0]));
+    return res.json(mapProposalToFrontend(result.rows[0], req.user?.id));
 });
 
 app.post('/api/proposals', authenticate, async (req: any, res) => {
+    if (req.user.role !== 'CONTRACTOR') {
+        return res.status(403).json({ error: 'Apenas contratantes podem criar propostas.' });
+    }
+    
     const { title, description, areaTag, location, budgetRange, targetProfessionalId, coordinates } = req.body;
     if (!title || !description) return res.status(400).json({ error: 'Título e descrição são obrigatórios.' });
     
@@ -1084,7 +1371,7 @@ app.post('/api/proposals', authenticate, async (req: any, res) => {
             contractor_reviews_count: req.user.reviews_count
         };
         MEMORY_PROPOSALS.push(newProposal);
-        return res.json(mapProposalToFrontend(newProposal));
+        return res.json(mapProposalToFrontend(newProposal, req.user?.id));
     }
 
     try {
@@ -1122,7 +1409,7 @@ app.post('/api/proposals', authenticate, async (req: any, res) => {
             }
         }
 
-        return res.json(mapProposalToFrontend(newProposal));
+        return res.json(mapProposalToFrontend(newProposal, req.user?.id));
     } catch (err: any) { console.error(err); res.status(500).json({ error: 'Erro ao criar proposta', details: err.message }); }
 });
 
@@ -1151,6 +1438,10 @@ app.post('/api/proposals/:id/hire', authenticate, async (req: any, res) => {
         const proposal = propCheck.rows[0];
         if (proposal.contratante_id !== req.user.id) return res.status(403).json({ error: 'Apenas o contratante pode contratar.' });
         if (proposal.status !== 'OPEN' && proposal.status !== 'NEGOTIATING') return res.status(400).json({ error: 'Proposta não está mais disponível.' });
+
+        // Verify if professional applied
+        const chatCheck = await pool.query('SELECT id FROM chat_sessions WHERE proposta_id = $1 AND professional_id = $2', [id, professionalId]);
+        if (chatCheck.rowCount === 0) return res.status(400).json({ error: 'Este profissional não se candidatou a esta proposta.' });
 
         // 2. Update Proposal to IN_PROGRESS and set professional_id
         await pool.query(`UPDATE propostas SET status = 'IN_PROGRESS', profissional_id = $1 WHERE id = $2`, [professionalId, id]);
@@ -1222,6 +1513,10 @@ app.post('/api/proposals/:id/cancel', authenticate, async (req: any, res) => {
 app.post('/api/proposals/:id/accept', authenticate, async (req: any, res) => {
     const { id } = req.params;
     
+    if (req.user.role !== 'PROFESSIONAL') {
+        return res.status(403).json({ error: 'Apenas profissionais podem aceitar propostas.' });
+    }
+    
     if (!isDbConnected) {
         const p = MEMORY_PROPOSALS.find(p => p.id === Number(id));
         if (!p) return res.status(404).json({ error: 'Proposta não encontrada' });
@@ -1268,7 +1563,7 @@ app.post('/api/proposals/:id/complete', authenticate, async (req: any, res) => {
         // Allow completing if IN_PROGRESS
         if (proposal.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Proposta não está em andamento.' });
 
-        const targetProId = professionalId || proposal.profissional_id;
+        const targetProId = proposal.profissional_id;
         if (!targetProId) return res.status(400).json({ error: 'Profissional não identificado.' });
 
         // Finalize
@@ -1318,6 +1613,23 @@ app.post('/api/reviews', authenticate, async (req: any, res) => {
     const { proposalId, targetId, rating, comment } = req.body;
     if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Nota deve ser entre 1 e 5.' });
     try {
+        const propRes = await pool.query('SELECT contratante_id, profissional_id, status FROM propostas WHERE id = $1', [proposalId]);
+        if (propRes.rowCount === 0) return res.status(404).json({ error: 'Proposta não encontrada.' });
+        
+        const prop = propRes.rows[0];
+        if (prop.status !== 'COMPLETED') return res.status(400).json({ error: 'Apenas propostas concluídas podem ser avaliadas.' });
+        
+        const isContractor = prop.contratante_id === req.user.id;
+        const isProfessional = prop.profissional_id === req.user.id;
+        
+        if (!isContractor && !isProfessional) return res.status(403).json({ error: 'Você não participou desta proposta.' });
+        
+        const expectedTargetId = isContractor ? prop.profissional_id : prop.contratante_id;
+        if (targetId !== expectedTargetId) return res.status(400).json({ error: 'Usuário alvo inválido para esta avaliação.' });
+
+        const existingReview = await pool.query('SELECT id FROM avaliacoes WHERE proposta_id = $1 AND avaliador_id = $2', [proposalId, req.user.id]);
+        if ((existingReview.rowCount || 0) > 0) return res.status(400).json({ error: 'Você já avaliou esta proposta.' });
+
         await pool.query(`INSERT INTO avaliacoes (proposta_id, avaliador_id, alvo_id, nota, comentario) VALUES ($1, $2, $3, $4, $5)`, [proposalId, req.user.id, targetId, rating, comment]);
         await pool.query(`UPDATE users SET reviews_count = (SELECT COUNT(*) FROM avaliacoes WHERE alvo_id = $1), rating = (SELECT AVG(nota) FROM avaliacoes WHERE alvo_id = $1) WHERE id = $1`, [targetId]);
         return res.json({ success: true });
@@ -1388,6 +1700,13 @@ app.post('/api/chats/:id/negotiate', authenticate, async (req: any, res) => {
     const { id } = req.params;
     const { price } = req.body;
     try {
+        const chatCheck = await pool.query(`
+            SELECT cs.id FROM chat_sessions cs 
+            JOIN propostas p ON cs.proposta_id = p.id 
+            WHERE cs.id = $1 AND (cs.professional_id = $2 OR p.contratante_id = $2)
+        `, [id, req.user.id]);
+        if (chatCheck.rowCount === 0) return res.status(403).json({ error: 'Acesso negado ao chat' });
+
         const negotiation = { proposedPrice: price, proposedBy: req.user.id, status: 'pending' };
         await pool.query('UPDATE chat_sessions SET negotiation = $1 WHERE id = $2', [JSON.stringify(negotiation), id]);
         
@@ -1413,8 +1732,13 @@ app.post('/api/chats/:id/negotiate', authenticate, async (req: any, res) => {
 app.post('/api/chats/:id/negotiate/accept', authenticate, async (req: any, res) => {
     const { id } = req.params;
     try {
-        const chatRes = await pool.query('SELECT negotiation, proposta_id FROM chat_sessions WHERE id = $1', [id]);
-        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado' });
+        const chatRes = await pool.query(`
+            SELECT cs.negotiation, cs.proposta_id 
+            FROM chat_sessions cs 
+            JOIN propostas p ON cs.proposta_id = p.id 
+            WHERE cs.id = $1 AND (cs.professional_id = $2 OR p.contratante_id = $2)
+        `, [id, req.user.id]);
+        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado ou acesso negado' });
         
         const neg = chatRes.rows[0].negotiation;
         if (!neg || neg.status !== 'pending' || String(neg.proposedBy) === String(req.user.id)) {
@@ -1447,8 +1771,13 @@ app.post('/api/chats/:id/negotiate/accept', authenticate, async (req: any, res) 
 app.post('/api/chats/:id/negotiate/reject', authenticate, async (req: any, res) => {
     const { id } = req.params;
     try {
-        const chatRes = await pool.query('SELECT negotiation FROM chat_sessions WHERE id = $1', [id]);
-        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado' });
+        const chatRes = await pool.query(`
+            SELECT cs.negotiation, cs.proposta_id 
+            FROM chat_sessions cs 
+            JOIN propostas p ON cs.proposta_id = p.id 
+            WHERE cs.id = $1 AND (cs.professional_id = $2 OR p.contratante_id = $2)
+        `, [id, req.user.id]);
+        if (chatRes.rowCount === 0) return res.status(404).json({ error: 'Chat não encontrado ou acesso negado' });
         
         const neg = chatRes.rows[0].negotiation;
         if (!neg || neg.status !== 'pending') {
@@ -1478,6 +1807,13 @@ app.post('/api/chats/:id/negotiate/reject', authenticate, async (req: any, res) 
 app.post('/api/messages', authenticate, async (req: any, res) => {
     const { chatId, text, type = 'text', mediaUrl, scheduleData } = req.body;
     try {
+        const chatCheck = await pool.query(`
+            SELECT cs.id FROM chat_sessions cs 
+            JOIN propostas p ON cs.proposta_id = p.id 
+            WHERE cs.id = $1 AND (cs.professional_id = $2 OR p.contratante_id = $2)
+        `, [chatId, req.user.id]);
+        if (chatCheck.rowCount === 0) return res.status(403).json({ error: 'Acesso negado ao chat' });
+
         const metadata: any = {};
         if (mediaUrl) metadata.mediaUrl = mediaUrl;
         if (scheduleData) metadata.scheduleData = scheduleData;
@@ -1500,10 +1836,23 @@ app.post('/api/messages', authenticate, async (req: any, res) => {
     } catch { res.status(500).json({ error: 'Erro ao enviar mensagem' }); }
 });
 
-app.put('/api/messages/:id/status', authenticate, async (req, res) => {
+app.put('/api/messages/:id/status', authenticate, async (req: any, res) => {
     try {
-        const result = await pool.query(`SELECT metadata FROM chat_messages WHERE id = $1`, [req.params.id]);
-        const meta = result.rows[0].metadata || {};
+        const msgCheck = await pool.query(`
+            SELECT cm.metadata, cs.professional_id, p.contratante_id, cm.sender_id
+            FROM chat_messages cm
+            JOIN chat_sessions cs ON cm.session_id = cs.id
+            JOIN propostas p ON cs.proposta_id = p.id
+            WHERE cm.id = $1
+        `, [req.params.id]);
+        if (msgCheck.rowCount === 0) return res.status(404).json({ error: 'Mensagem não encontrada' });
+        
+        const msg = msgCheck.rows[0];
+        if (msg.professional_id !== req.user.id && msg.contratante_id !== req.user.id) {
+             return res.status(403).json({ error: 'Acesso negado' });
+        }
+        
+        const meta = msg.metadata || {};
         if (meta.scheduleData) meta.scheduleData.status = req.body.status;
         await pool.query(`UPDATE chat_messages SET metadata = $1 WHERE id = $2`, [JSON.stringify(meta), req.params.id]);
         return res.json({ success: true });
@@ -1759,7 +2108,16 @@ app.delete('/api/admin/services/:id', authenticate, async (req: any, res) => {
     }
 });
 
-app.post('/api/upload', upload.single('file'), async (req: any, res) => {
+const userRateLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 10, // 10 requests per minute per user
+    keyGenerator: (req: any) => {
+        return req.user ? String(req.user.id) : req.ip; // Use user ID if authenticated, else IP
+    },
+    message: { error: 'Muitas requisições. Tente novamente em um minuto.' }
+});
+
+app.post('/api/upload', authenticate, userRateLimiter, timeout('2m'), upload.single('file'), async (req: any, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
     if (!process.env.CLOUDINARY_API_KEY) {
@@ -1775,7 +2133,7 @@ app.post('/api/upload', upload.single('file'), async (req: any, res) => {
     } catch { res.status(500).json({ error: 'Falha no upload' }); }
 });
 
-app.post('/api/ai/enhance', async (req, res) => {
+app.post('/api/ai/enhance', authenticate, userRateLimiter, async (req: any, res) => {
     if (!aiClient) return res.json({ text: req.body.text });
     try {
         const response = await aiClient.models.generateContent({ model: 'gemini-2.0-flash-lite-preview-02-05', contents: `Melhore este texto de pedido de serviço (curto e profissional): "${req.body.text}"` });
@@ -1784,8 +2142,19 @@ app.post('/api/ai/enhance', async (req, res) => {
 });
 
 // ✅ Increment Profile Views
-app.post('/api/users/:id/view', async (req, res) => {
+app.post('/api/users/:id/view', async (req: any, res) => {
     try {
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+            try {
+                const token = authHeader.split(' ')[1];
+                const decoded: any = jwt.verify(token, JWT_SECRET);
+                if (decoded.id === parseInt(req.params.id)) {
+                    return res.json({ success: true, message: 'Self view ignored' });
+                }
+            } catch (e) { /* ignore invalid token */ }
+        }
+
         if (isDbConnected) {
             await pool.query('UPDATE users SET views = COALESCE(views, 0) + 1 WHERE id = $1', [req.params.id]);
         }
@@ -1968,6 +2337,7 @@ async function initDB() {
             await client.query(`CREATE TABLE IF NOT EXISTS user_favorites (user_id INTEGER REFERENCES users(id), professional_id INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, professional_id));`);
             await client.query(`CREATE TABLE IF NOT EXISTS reports (id SERIAL PRIMARY KEY, reporter_id INTEGER REFERENCES users(id), reported_id INTEGER REFERENCES users(id), reason TEXT, description TEXT, status VARCHAR(50) DEFAULT 'OPEN', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
             await client.query(`CREATE TABLE IF NOT EXISTS blocked_users (blocker_id INTEGER REFERENCES users(id), blocked_id INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (blocker_id, blocked_id));`);
+           await client.query(`CREATE TABLE IF NOT EXISTS invalidated_tokens (id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
 
             // Clear catalog tables to prevent duplicates (since we are re-seeding)
             await client.query('DELETE FROM services');
@@ -2075,6 +2445,18 @@ async function startServer() {
 
         httpServer.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Servidor Linka Jobi rodando na porta ${PORT}`);
+        });
+
+        // Cron job for cleaning up expired tokens
+        cron.schedule('0 0 * * *', async () => {
+            if (isDbConnected) {
+                try {
+                    await pool.query('DELETE FROM invalidated_tokens WHERE expires_at < NOW()');
+                    console.log('🧹 Cleaned up expired tokens from blacklist.');
+                } catch (err) {
+                    console.error('❌ Error cleaning up expired tokens:', err);
+                }
+            }
         });
     } catch (err) { console.error("❌ CRITICAL SERVER ERROR:", err); }
 }

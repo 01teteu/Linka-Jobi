@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Proposal, ProposalStatus, UserRole } from '../types';
 import { MapPin, CheckCircle2, X, MessageCircle, DollarSign, Clock, ArrowRight, Loader2, Star, ShieldCheck, AlertTriangle } from 'lucide-react';
 
@@ -54,7 +55,13 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
 
   return (
     <>
-      <div className="bg-white rounded-[1.5rem] p-5 border border-gray-100 shadow-card hover:shadow-float transition-all duration-300 mb-4 group relative overflow-hidden">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-50px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="bg-white rounded-[1.5rem] p-5 border border-gray-100 shadow-card hover:shadow-float transition-all duration-300 mb-4 group relative overflow-hidden"
+      >
         
         {/* Header: Cliente e Categoria */}
         <div className="flex justify-between items-start mb-4">
@@ -123,7 +130,7 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
                 {proposal.status === ProposalStatus.OPEN ? 'Aguardando' : 'Ocupado / Fechado'}
             </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Modal de Confirmação */}
       {showConfirm && (

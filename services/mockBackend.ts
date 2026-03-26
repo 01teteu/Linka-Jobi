@@ -5,30 +5,93 @@ const BASE_URL = '';
 
 // --- API Client Puro ---
 
-const getHeaders = (isMultipart = false) => {
+// Logger simples para o frontend que só exibe logs em desenvolvimento
+const logger = {
+    warn: (...args: any[]) => {
+        if (import.meta.env.MODE !== 'production') {
+            console.warn(...args);
+        }
+    },
+    error: (...args: any[]) => {
+        if (import.meta.env.MODE !== 'production') {
+            console.error(...args);
+        }
+    }
+};
+
+export const getCookie = (name: string) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+    return null;
+};
+
+const getHeaders = (isMultipart = false, method = 'GET') => {
     const token = localStorage.getItem('token');
+    const csrfToken = getCookie('csrf-token');
+    
     const headers: any = { 
         'Authorization': token ? `Bearer ${token}` : '' 
     };
+    
+    if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+    
     if (!isMultipart) {
         headers['Content-Type'] = 'application/json';
     }
     return headers;
 };
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+let isRefreshingCsrf = false;
+
+const apiFetch = async (endpoint: string, options: RequestInit = {}, isRetry = false): Promise<any> => {
     const url = endpoint.startsWith('/') ? endpoint : `${BASE_URL}${endpoint}`;
     const isFormData = options.body instanceof FormData;
+    const method = options.method || 'GET';
+
+    // 1. Fetch CSRF token automatically before the first mutation request if missing
+    if (!isRetry && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) && !getCookie('csrf-token') && endpoint !== '/api/auth/csrf-token') {
+        if (!isRefreshingCsrf) {
+            isRefreshingCsrf = true;
+            try {
+                // We use a direct fetch here to avoid circular dependency with Backend.getCsrfToken
+                await fetch(`${BASE_URL}/api/auth/csrf-token`, { method: 'GET' });
+            } catch (e) {
+                logger.error("Failed to pre-fetch CSRF token", e);
+            } finally {
+                isRefreshingCsrf = false;
+            }
+        }
+    }
 
     try {
-        const response = await fetch(url, { 
+        let response = await fetch(url, { 
             ...options, 
             headers: { 
-                ...getHeaders(isFormData), 
+                ...getHeaders(isFormData, method), 
                 ...(options.headers || {}) 
             } 
         });
         
+        // 2. Automatic refresh on 403 Forbidden (likely invalid/expired CSRF token)
+        if (response.status === 403 && !isRetry && endpoint !== '/api/auth/csrf-token') {
+            logger.warn('CSRF token missing or invalid. Refreshing token and retrying...');
+            if (!isRefreshingCsrf) {
+                isRefreshingCsrf = true;
+                try {
+                    await fetch(`${BASE_URL}/api/auth/csrf-token`, { method: 'GET' });
+                } catch (e) {
+                    logger.error("Failed to refresh CSRF token", e);
+                } finally {
+                    isRefreshingCsrf = false;
+                }
+            }
+            // Retry the request with the new headers
+            return await apiFetch(endpoint, options, true);
+        }
+
         const contentType = response.headers.get("content-type");
         let data = null;
         if (contentType && contentType.includes("application/json")) {
@@ -50,7 +113,7 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     } catch (error: any) {
         // Suppress NetworkError logs to avoid console noise during dev server restarts
         if (error.message !== 'Failed to fetch' && !error.message.includes('NetworkError')) {
-             console.warn(`API Warning [${endpoint}]:`, error.message);
+             logger.warn(`API Warning [${endpoint}]:`, error.message);
         }
         throw error;
     }
@@ -59,6 +122,15 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 // --- Backend Service Real ---
 
 export const Backend = {
+    // CSRF Token
+    getCsrfToken: async () => {
+        try {
+            await apiFetch('/api/auth/csrf-token', { method: 'GET' });
+        } catch (e) {
+            console.error('Failed to get CSRF token', e);
+        }
+    },
+
     // Health Check
     checkHealth: async () => {
         try {
@@ -67,6 +139,11 @@ export const Backend = {
         } catch {
             return false;
         }
+    },
+
+    // Seed Database
+    seedDatabase: async () => {
+        return apiFetch('/api/seed', { method: 'POST' });
     },
 
     // Auth
