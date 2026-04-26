@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Linka Jobi</title>
     
-    <!-- CRITICAL FIX: Polyfill for process -->
-    <script>
-      window.process = { env: { NODE_ENV: 'production' } };
-    </script>
-    
     <!-- Google Fonts: Plus Jakarta Sans (Spotify-like) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -109,33 +104,7 @@
       }
       .leaflet-popup-content { margin: 0 !important; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.574.0",
-    "dotenv": "https://esm.sh/dotenv@^17.3.1",
-    "fastify": "https://esm.sh/fastify@^5.7.4",
-    "pg": "https://esm.sh/pg@^8.18.0",
-    "jsonwebtoken": "https://esm.sh/jsonwebtoken@^9.0.3",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
-    "@fastify/multipart": "https://esm.sh/@fastify/multipart@^9.4.0",
-    "path": "https://esm.sh/path@^0.12.7",
-    "@fastify/cors": "https://esm.sh/@fastify/cors@^11.2.0",
-    "bcryptjs": "https://esm.sh/bcryptjs@^3.0.3",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "url": "https://esm.sh/url@^0.11.4",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
-    "stream": "https://esm.sh/stream@^0.0.3",
-    "cloudinary": "https://esm.sh/cloudinary@^2.9.0",
-    "util": "https://esm.sh/util@^0.12.5"
-  }
-}
-</script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>

@@ -1,5 +1,6 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
+import path from 'path';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -17,15 +18,74 @@ import cookieParser from 'cookie-parser';
 import timeout from 'connect-timeout';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { DEFAULT_CATEGORIES, DEFAULT_SERVICES } from './constants';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const app = express();
 app.set('trust proxy', 1); // Trust first proxy for rate limiting
+
+// --- Zod Validation Middleware ---
+const validate = (schema: z.ZodSchema) => (req: any, res: any, next: any) => {
+    try {
+        schema.parse(req.body);
+        next();
+    } catch (error: any) {
+        if (error && error.errors) {
+            return res.status(400).json({ error: error.errors.map((e: any) => e.message).join(', ') });
+        }
+        next(error);
+    }
+};
+
+// --- Zod Schemas ---
+const loginSchema = z.object({
+    email: z.string().email('Email inválido'),
+    senha: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres')
+});
+
+const registerSchema = z.object({
+    name: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(8, 'Senha deve ter ao menos 8 caracteres')
+        .regex(/[A-Z]/, 'Senha deve conter ao menos uma letra maiúscula')
+        .regex(/[0-9]/, 'Senha deve conter ao menos um número')
+        .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Senha deve conter ao menos um caractere especial'),
+    role: z.enum(['CONTRACTOR', 'PROFESSIONAL', 'ADMIN']),
+    avatarUrl: z.string().optional(),
+    location: z.string().optional(),
+    phone: z.string().optional(),
+    specialty: z.string().optional(),
+    coordinates: z.any().optional(),
+    cep: z.string().optional()
+});
+
+const createProposalSchema = z.object({
+    title: z.string().min(5, 'O título deve ter pelo menos 5 caracteres'),
+    description: z.string().min(10, 'A descrição deve ter pelo menos 10 caracteres'),
+    areaTag: z.string().min(1, 'A categoria é obrigatória'),
+    location: z.string().optional(),
+    budgetRange: z.string().optional(),
+    targetProfessionalId: z.number().int().optional(),
+    coordinates: z.any().optional()
+});
+
+const sendMessageSchema = z.object({
+    chatId: z.number().int().positive('Chat ID inválido'),
+    text: z.string().min(1, 'A mensagem não pode estar vazia'),
+    type: z.string().optional(),
+    mediaUrl: z.string().url().optional(),
+    scheduleData: z.any().optional()
+});
 const PORT = 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'segredo_super_secreto_linka_jobi_2024';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'segredo_refresh_super_secreto_linka_jobi_2024';
+const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+    console.error("CRITICAL ERROR: JWT_SECRET and JWT_REFRESH_SECRET must be set in the environment.");
+    process.exit(1);
+}
 const DB_CONNECTION = process.env.DATABASE_URL;
 const GOOGLE_API_KEY = process.env.API_KEY || process.env.VITE_GOOGLE_API_KEY;
 
@@ -234,7 +294,8 @@ let aiClient: any = null;
 if (GOOGLE_API_KEY) { aiClient = new GoogleGenAI({ apiKey: GOOGLE_API_KEY }); }
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 // Global timeout (except for upload)
 app.use((req: any, res: any, next: any) => {
@@ -261,7 +322,7 @@ app.use(helmet({
             // Vite injects styles via JS using inline style tags, making unsafe-inline necessary
             // unless we extract all CSS to a file during build and only link that file.
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
-            imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://ui-avatars.com", "https://*.tile.openstreetmap.org", "https://images.unsplash.com", "https://plus.unsplash.com"],
+            imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "http://res.cloudinary.com", "https://*.cloudinary.com", "https://ui-avatars.com", "https://*.tile.openstreetmap.org", "https://images.unsplash.com", "https://plus.unsplash.com", "https://via.placeholder.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             connectSrc: ["'self'"],
         },
@@ -361,7 +422,7 @@ function mapUserToFrontend(u: any) {
     if (!u) return null;
     return {
         id: u.id, name: u.nome, email: u.email, role: u.role,
-        avatarUrl: u.avatar_url, location: u.localizacao, status: u.status,
+        avatarUrl: u.avatar_url, coverUrl: u.cover_url, location: u.localizacao, status: u.status,
         bio: u.bio, specialty: u.specialty, phone: u.telefone,
         coordinates: { lat: u.latitude, lng: u.longitude },
         isSubscriber: u.is_subscriber,
@@ -377,7 +438,7 @@ function mapPublicUserToFrontend(u: any) {
     if (!u) return null;
     return {
         id: u.id, name: u.nome, role: u.role,
-        avatarUrl: u.avatar_url, location: u.localizacao, status: u.status,
+        avatarUrl: u.avatar_url, coverUrl: u.cover_url, location: u.localizacao, status: u.status,
         bio: u.bio, specialty: u.specialty, 
         coordinates: { lat: u.latitude, lng: u.longitude },
         isSubscriber: u.is_subscriber,
@@ -665,9 +726,8 @@ app.post('/api/auth/logout', async (req: any, res: any) => {
 });
 
 // ✅ Login com validação (Híbrido DB/Memória)
-app.post('/api/login', rateLimiter, async (req, res) => {
+app.post('/api/login', rateLimiter, validate(loginSchema), async (req, res) => {
     const { email, senha } = req.body;
-    if (!email || !senha) return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
     
     try {
         let user;
@@ -767,23 +827,10 @@ app.post('/api/login', rateLimiter, async (req, res) => {
 });
 
 // ✅ Register com validação + CEP (Híbrido DB/Memória)
-app.post('/api/register', rateLimiter, async (req, res) => {
+app.post('/api/register', rateLimiter, validate(registerSchema), async (req, res) => {
     const { name, email, password, role, avatarUrl, location, phone, specialty, coordinates, cep } = req.body;
     const finalAvatarUrl = avatarUrl || null;
     
-    if (!name || !email || !password || !role) return res.status(400).json({ error: 'Campos obrigatórios: nome, email, senha, papel.' });
-    if (!['CONTRACTOR', 'PROFESSIONAL'].includes(role)) return res.status(400).json({ error: 'Papel inválido.' });
-    
-    // Stronger Email Validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-
-    // Stronger Password Validation
-    if (password.length < 8) return res.status(400).json({ error: 'Senha deve ter ao menos 8 caracteres.' });
-    if (!/[A-Z]/.test(password)) return res.status(400).json({ error: 'Senha deve conter ao menos uma letra maiúscula.' });
-    if (!/[0-9]/.test(password)) return res.status(400).json({ error: 'Senha deve conter ao menos um número.' });
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return res.status(400).json({ error: 'Senha deve conter ao menos um caractere especial.' });
-
     try {
         let lat = coordinates?.lat || -23.55;
         let lng = coordinates?.lng || -46.63;
@@ -947,7 +994,7 @@ app.put('/api/users/:id/password', authenticate, async (req: any, res) => {
 
 // ✅ CORRIGIDO: Atualiza specialty + CEP + permissão + PORTFOLIO + SERVICES (Híbrido)
 app.put('/api/users/:id', authenticate, async (req: any, res) => {
-    const { name, location, phone, bio, avatarUrl, specialty, coordinates, cep, portfolio, services } = req.body;
+    const { name, location, phone, bio, avatarUrl, coverUrl, specialty, coordinates, cep, portfolio, services } = req.body;
     
     // Convert params.id to number for comparison
     const targetId = parseInt(req.params.id);
@@ -973,10 +1020,11 @@ app.put('/api/users/:id', authenticate, async (req: any, res) => {
                 `UPDATE users SET 
                     nome = COALESCE($1, nome), localizacao = COALESCE($2, localizacao),
                     telefone = COALESCE($3, telefone), bio = COALESCE($4, bio),
-                    avatar_url = COALESCE($5, avatar_url), specialty = COALESCE($6, specialty),
-                    latitude = COALESCE($7, latitude), longitude = COALESCE($8, longitude)
-                 WHERE id = $9 RETURNING *`,
-                [name, resolvedLocation, phone, bio, avatarUrl, specialty, lat, lng, targetId]
+                    avatar_url = COALESCE($5, avatar_url), cover_url = COALESCE($6, cover_url),
+                    specialty = COALESCE($7, specialty),
+                    latitude = COALESCE($8, latitude), longitude = COALESCE($9, longitude)
+                 WHERE id = $10 RETURNING *`,
+                [name, resolvedLocation, phone, bio, avatarUrl, coverUrl, specialty, lat, lng, targetId]
             );
             user = result.rows[0];
 
@@ -1018,6 +1066,7 @@ app.put('/api/users/:id', authenticate, async (req: any, res) => {
             if (phone) u.telefone = phone;
             if (bio) u.bio = bio;
             if (avatarUrl) u.avatar_url = avatarUrl;
+            if (coverUrl) u.cover_url = coverUrl;
             if (specialty) u.specialty = specialty;
             if (lat) u.latitude = lat;
             if (lng) u.longitude = lng;
@@ -1342,13 +1391,12 @@ app.get('/api/proposals/:id', authenticate, async (req: any, res) => {
     return res.json(mapProposalToFrontend(result.rows[0], req.user?.id));
 });
 
-app.post('/api/proposals', authenticate, async (req: any, res) => {
+app.post('/api/proposals', authenticate, validate(createProposalSchema), async (req: any, res) => {
     if (req.user.role !== 'CONTRACTOR') {
         return res.status(403).json({ error: 'Apenas contratantes podem criar propostas.' });
     }
     
     const { title, description, areaTag, location, budgetRange, targetProfessionalId, coordinates } = req.body;
-    if (!title || !description) return res.status(400).json({ error: 'Título e descrição são obrigatórios.' });
     
     if (!isDbConnected) {
         const newProposal = {
@@ -1804,7 +1852,7 @@ app.post('/api/chats/:id/negotiate/reject', authenticate, async (req: any, res) 
     } catch (err) { res.status(500).json({ error: 'Erro ao recusar valor' }); }
 });
 
-app.post('/api/messages', authenticate, async (req: any, res) => {
+app.post('/api/messages', authenticate, validate(sendMessageSchema), async (req: any, res) => {
     const { chatId, text, type = 'text', mediaUrl, scheduleData } = req.body;
     try {
         const chatCheck = await pool.query(`
@@ -2121,7 +2169,11 @@ app.post('/api/upload', authenticate, userRateLimiter, timeout('2m'), upload.sin
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
     if (!process.env.CLOUDINARY_API_KEY) {
-        return res.status(500).json({ error: 'Cloudinary não configurado. Upload indisponível.' });
+        // Fallback para base64 se o Cloudinary não estiver configurado (útil para testes locais/preview)
+        const base64 = req.file.buffer.toString('base64');
+        const mimeType = req.file.mimetype;
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+        return res.json({ url: dataUrl });
     }
 
     try {
@@ -2139,6 +2191,17 @@ app.post('/api/ai/enhance', authenticate, userRateLimiter, async (req: any, res)
         const response = await aiClient.models.generateContent({ model: 'gemini-2.0-flash-lite-preview-02-05', contents: `Melhore este texto de pedido de serviço (curto e profissional): "${req.body.text}"` });
         return res.json({ text: (response.text || '').trim() });
     } catch { return res.json({ text: req.body.text }); }
+});
+
+app.post('/api/ai/classify', authenticate, userRateLimiter, async (req: any, res) => {
+    if (!aiClient) return res.json({ category: "" });
+    try {
+        const response = await aiClient.models.generateContent({ 
+            model: 'gemini-2.0-flash-lite-preview-02-05', 
+            contents: `Classifique o seguinte pedido de serviço em uma categoria curta (ex: Encanador, Eletricista, Design, Programação). Retorne APENAS o nome da categoria, sem aspas ou pontuação: "${req.body.text}"` 
+        });
+        return res.json({ category: (response.text || '').trim() });
+    } catch { return res.json({ category: "" }); }
 });
 
 // ✅ Increment Profile Views
@@ -2294,7 +2357,8 @@ async function initDB() {
 
         try {
             await client.query('BEGIN');
-            await client.query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL, senha_hash VARCHAR(255) NOT NULL, role VARCHAR(50) NOT NULL DEFAULT 'CONTRACTOR', avatar_url TEXT, localizacao VARCHAR(255), telefone VARCHAR(50), bio TEXT, specialty TEXT, latitude DECIMAL(10,8), longitude DECIMAL(11,8), xp INTEGER DEFAULT 0, rating DECIMAL(3,2) DEFAULT 5.00, reviews_count INTEGER DEFAULT 0, status VARCHAR(50) DEFAULT 'ACTIVE', is_subscriber BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+            await client.query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL, senha_hash VARCHAR(255) NOT NULL, role VARCHAR(50) NOT NULL DEFAULT 'CONTRACTOR', avatar_url TEXT, cover_url TEXT, localizacao VARCHAR(255), telefone VARCHAR(50), bio TEXT, specialty TEXT, latitude DECIMAL(10,8), longitude DECIMAL(11,8), xp INTEGER DEFAULT 0, rating DECIMAL(3,2) DEFAULT 5.00, reviews_count INTEGER DEFAULT 0, status VARCHAR(50) DEFAULT 'ACTIVE', is_subscriber BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+            await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_url TEXT;`);
             await client.query(`CREATE TABLE IF NOT EXISTS categories (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100) NOT NULL, image_url TEXT);`);
             await client.query(`CREATE TABLE IF NOT EXISTS services (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50) REFERENCES categories(id), name VARCHAR(100) NOT NULL, emoji VARCHAR(10), image_url TEXT, is_active BOOLEAN DEFAULT TRUE);`);
             await client.query(`CREATE TABLE IF NOT EXISTS propostas (id SERIAL PRIMARY KEY, contratante_id INTEGER REFERENCES users(id), profissional_id INTEGER REFERENCES users(id), titulo VARCHAR(255) NOT NULL, descricao TEXT, area_tag VARCHAR(100), localizacao VARCHAR(255), orcamento_estimado VARCHAR(100), target_professional_id INTEGER REFERENCES users(id), latitude DECIMAL(10,8), longitude DECIMAL(11,8), status VARCHAR(50) DEFAULT 'OPEN', data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP, data_conclusao TIMESTAMP, accepted_count INTEGER DEFAULT 0);`);
@@ -2424,6 +2488,12 @@ async function startServer() {
         if (process.env.NODE_ENV !== 'production') {
             const vite = await createViteServer({ server: { middlewareMode: true, hmr: { server: httpServer, clientPort: 443 } }, appType: 'spa' });
             app.use(vite.middlewares);
+        } else {
+            const distPath = path.join(process.cwd(), 'dist');
+            app.use(express.static(distPath));
+            app.get('*', (req, res) => {
+                res.sendFile(path.join(distPath, 'index.html'));
+            });
         }
         try {
             io = new Server(httpServer, { cors: { origin: "*", methods: ["GET", "POST"] } });

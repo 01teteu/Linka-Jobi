@@ -100,6 +100,30 @@ function mapProposalToFrontend(p) {
     };
 }
 
+// --- HELPER: Extrai valor numérico do orçamento ---
+// Suporta formatos: "500", "500.00", "R$ 500", "R$ 500 - R$ 1.000", "R$500,00"
+// Sempre extrai o PRIMEIRO número encontrado (valor mínimo do intervalo)
+// TODO V2: substituir por valor real confirmado pelo gateway de pagamento (Pagar.me/Stripe)
+function extrairValorOrcamento(orcamentoStr: string): number {
+    if (!orcamentoStr) return 0.00;
+
+    // Remove prefixo de moeda e espaços iniciais
+    const limpo = orcamentoStr.trim();
+
+    // Tenta encontrar o primeiro número válido na string
+    // Suporta formatos: 500 | 500.00 | 1.000 | 1.000,00 | 1,000.00
+    const match = limpo.match(/[\d]+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/);
+    if (!match) return 0.00;
+
+    // Normaliza separadores: remove pontos de milhar, converte vírgula decimal em ponto
+    const numeroStr = match[0]
+        .replace(/\.(?=\d{3})/g, '')  // remove ponto separador de milhar (ex: 1.000 → 1000)
+        .replace(',', '.');            // converte vírgula decimal em ponto (ex: 500,00 → 500.00)
+
+    const valor = parseFloat(numeroStr);
+    return isNaN(valor) ? 0.00 : valor;
+}
+
 // --- ROTAS GERAIS ---
 
 fastify.get('/api/health', async () => ({ status: 'ok', db: 'connected', mode: 'PRODUCTION_DB' }));
@@ -346,18 +370,24 @@ fastify.post('/api/proposals/:id/complete', { preValidation: [fastify.authentica
         
         // 1. Atualizar XP do profissional (+500 XP)
         const prop = await pool.query('SELECT profissional_id, orcamento_estimado FROM propostas WHERE id = $1', [id]);
-        if(prop.rowCount > 0) {
+        if (prop.rowCount > 0) {
             const proId = prop.rows[0].profissional_id;
             await pool.query('UPDATE users SET xp = xp + 500 WHERE id = $1', [proId]);
             
-            // 2. Registrar Transação Financeira (Simulação de Recebimento)
-            // Extrai valor numérico simples
-            const valorStr = prop.rows[0].orcamento_estimado || '0';
-            const valor = parseFloat(valorStr.replace(/[^0-9.]/g, '')) || 100.00;
-            
+            // 2. Registrar Transação Financeira
+            // CORREÇÃO: usa extrairValorOrcamento() para evitar parsing errado de intervalos
+            // como "R$ 500 - R$ 1.000" que antes gerava o valor incorreto 5001000.
+            // Fallback é 0.00 (sem valor arbitrário) para manter histórico financeiro limpo.
+            // TODO V2: substituir valor pelo confirmado via webhook do gateway (Pagar.me/Stripe)
+            const valor = extrairValorOrcamento(prop.rows[0].orcamento_estimado);
+
+            // CORREÇÃO: status PENDING_PAYMENT em vez de COMPLETED,
+            // pois no MVP o pagamento ocorre fora da plataforma (Pix, dinheiro, etc.).
+            // fonte_pagamento = 'EXTERNO_MVP' identifica registros do período sem gateway.
+            // TODO V2: mudar status para COMPLETED apenas após confirmação do webhook do gateway.
             await pool.query(
-                `INSERT INTO transactions (user_id, type, amount, description, status, related_proposal_id) 
-                 VALUES ($1, 'INCOME', $2, 'Serviço Concluído', 'COMPLETED', $3)`,
+                `INSERT INTO transactions (user_id, type, amount, description, status, fonte_pagamento, related_proposal_id) 
+                 VALUES ($1, 'INCOME', $2, 'Serviço Concluído', 'PENDING_PAYMENT', 'EXTERNO_MVP', $3)`,
                 [proId, valor, id]
             );
         }
@@ -466,9 +496,8 @@ fastify.post('/api/messages', { preValidation: [fastify.authenticate] }, async (
 
 fastify.put('/api/messages/:id/status', { preValidation: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params;
-    const { status } = req.body; // 'CONFIRMED', etc.
+    const { status } = req.body;
     try {
-        // Atualiza metadata JSONB. Exemplo simples:
         const res = await pool.query(`SELECT metadata FROM chat_messages WHERE id = $1`, [id]);
         const meta = res.rows[0].metadata || {};
         if (meta.scheduleData) meta.scheduleData.status = status;
@@ -532,7 +561,6 @@ fastify.get('/api/gamification', { preValidation: [fastify.authenticate] }, asyn
 
         const progress = Math.min(100, Math.floor((xp / nextLevelXp) * 100));
 
-        // Busca Badges Reais
         const badgesRes = await pool.query(`
             SELECT b.*, (ub.user_id IS NOT NULL) as unlocked 
             FROM badges b 
@@ -579,7 +607,6 @@ fastify.get('/api/wallet', { preValidation: [fastify.authenticate] }, async (req
     try {
         const transRes = await pool.query('SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
         
-        // Calcula saldo somando INCOME/DEPOSIT e subtraindo EXPENSE/WITHDRAW
         const balance = transRes.rows.reduce((acc, t) => {
             if (t.type === 'INCOME' || t.type === 'DEPOSIT') return acc + parseFloat(t.amount);
             return acc - parseFloat(t.amount);
@@ -671,7 +698,6 @@ const start = async () => {
         console.log(`🚀 Servidor Linka Jobi rodando na porta ${PORT}`);
         await pool.query('SELECT NOW()'); 
         console.log("✅ Conectado ao Banco de Dados (PostgreSQL)");
-        // Inicializar tabela se não existir (Opcional, pois schema.sql cuida disso, mas bom pra garantir)
         await fastify.listen({ port: PORT, host: '0.0.0.0' });
     } catch (err) {
         console.error(err);

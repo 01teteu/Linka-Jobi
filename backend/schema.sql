@@ -143,13 +143,17 @@ CREATE TABLE user_badges (
 );
 
 -- 9. CARTEIRA
+-- fonte_pagamento: identifica a origem do pagamento.
+-- 'EXTERNO_MVP' = pago fora da plataforma (Pix, dinheiro, etc.) durante o período sem gateway.
+-- TODO V2: adicionar valores como 'PAGARME', 'STRIPE' após integração do gateway de pagamento.
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
     type VARCHAR(20) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE', 'WITHDRAW', 'DEPOSIT')),
     amount DECIMAL(10,2) NOT NULL,
     description VARCHAR(255) NOT NULL,
-    status VARCHAR(20) DEFAULT 'COMPLETED',
+    status VARCHAR(20) DEFAULT 'COMPLETED' CHECK (status IN ('COMPLETED', 'PENDING_PAYMENT', 'CANCELLED')),
+    fonte_pagamento VARCHAR(50) DEFAULT 'EXTERNO_MVP',
     related_proposal_id INT REFERENCES propostas(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -97,8 +97,6 @@ const App: React.FC = () => {
     const initApp = async () => {
         try {
             await new Promise(r => setTimeout(r, 800));
-            // Try to seed database silently
-            Backend.seedDatabase().catch(() => {});
             
             const session = await Backend.init();
             if (session && session.user) {

@@ -104,7 +104,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
         setIsUploading(true);
         try {
             // Upload real via Backend Service
-            const newUrl = await Backend.uploadImage(file);
+            const newUrl = await Backend.uploadImage(file, 'avatar');
             setFormData(prev => ({ ...prev, avatarUrl: newUrl }));
         } catch (error) {
             alert("Erro ao enviar imagem.");

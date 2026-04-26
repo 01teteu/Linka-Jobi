@@ -1,4 +1,6 @@
 
+import { apiFetch } from './mockBackend';
+
 /**
  * Uses the Backend API to rephrase and professionalize proposal descriptions.
  * Security Note: API Key is now safely handled on the server side.
@@ -7,15 +9,11 @@ export const enhanceProposalDescription = async (input: string) => {
   if (!input || input.trim().length < 3) return input;
   
   try {
-    const response = await fetch('/api/ai/enhance', {
+    const data = await apiFetch('/api/ai/enhance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: input })
     });
     
-    if (!response.ok) throw new Error("AI service unavailable");
-    
-    const data = await response.json();
     return data.text || input;
   } catch (error: any) {
     console.warn("Gemini enhancement failed (fallback):", error);
@@ -30,15 +28,11 @@ export const suggestServiceCategory = async (input: string) => {
   if (!input) return "";
 
   try {
-    const response = await fetch('/api/ai/classify', {
+    const data = await apiFetch('/api/ai/classify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: input })
     });
 
-    if (!response.ok) return "";
-
-    const data = await response.json();
     return data.category || "";
   } catch (error: any) {
     console.warn("Gemini classification failed (fallback):", error);

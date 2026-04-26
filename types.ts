@@ -167,6 +167,7 @@ export interface User {
   role: UserRole;
   status?: UserStatus;
   avatarUrl?: string;
+  coverUrl?: string;
   location?: string;
   coordinates?: { lat: number; lng: number }; 
   phone?: string;
@@ -181,7 +182,6 @@ export interface User {
   isFavorite?: boolean;
   portfolio?: PortfolioItem[];
   services?: ServiceItem[];
-  coverUrl?: string;
 }
 
 export interface Proposal {

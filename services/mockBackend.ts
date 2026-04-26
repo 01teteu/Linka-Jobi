@@ -46,7 +46,7 @@ const getHeaders = (isMultipart = false, method = 'GET') => {
 
 let isRefreshingCsrf = false;
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}, isRetry = false): Promise<any> => {
+export const apiFetch = async (endpoint: string, options: RequestInit = {}, isRetry = false): Promise<any> => {
     const url = endpoint.startsWith('/') ? endpoint : `${BASE_URL}${endpoint}`;
     const isFormData = options.body instanceof FormData;
     const method = options.method || 'GET';
@@ -75,7 +75,39 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}, isRetry = f
             } 
         });
         
-        // 2. Automatic refresh on 403 Forbidden (likely invalid/expired CSRF token)
+        // 2. Automatic refresh on 401 Unauthorized (expired JWT)
+        if (response.status === 401 && !isRetry && endpoint !== '/api/auth/refresh' && endpoint !== '/api/login') {
+            logger.warn('Token expired or invalid. Attempting to refresh...');
+            try {
+                const refreshResponse = await fetch(`${BASE_URL}/api/auth/refresh`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    if (refreshData.token) {
+                        localStorage.setItem('token', refreshData.token);
+                        logger.info('Token refreshed successfully.');
+                        // Retry the original request
+                        return await apiFetch(endpoint, options, true);
+                    }
+                }
+                
+                // If refresh fails or returns no token, redirect to login
+                logger.error('Token refresh failed. Redirecting to login.');
+                localStorage.removeItem('token');
+                window.location.href = '/?login=true';
+                return null;
+            } catch (e) {
+                logger.error("Failed to refresh token", e);
+                localStorage.removeItem('token');
+                window.location.href = '/?login=true';
+                return null;
+            }
+        }
+
+        // 3. Automatic refresh on 403 Forbidden (likely invalid/expired CSRF token)
         if (response.status === 403 && !isRetry && endpoint !== '/api/auth/csrf-token') {
             logger.warn('CSRF token missing or invalid. Refreshing token and retrying...');
             if (!isRefreshingCsrf) {
@@ -139,11 +171,6 @@ export const Backend = {
         } catch {
             return false;
         }
-    },
-
-    // Seed Database
-    seedDatabase: async () => {
-        return apiFetch('/api/seed', { method: 'POST' });
     },
 
     // Auth

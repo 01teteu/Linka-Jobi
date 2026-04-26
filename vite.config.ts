@@ -9,10 +9,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // Define variáveis globais para substituir no código cliente
-    define: {
-      // API Key removida por segurança. O Frontend não deve ter acesso a ela.
-    },
     server: {
       hmr: {
         clientPort: 443,
