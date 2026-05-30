@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Transaction, UserRole } from '../types';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import { 
     Wallet, ArrowUpRight, ArrowDownLeft, Eye, EyeOff, CreditCard, 
     Banknote, PieChart, ChevronLeft, Loader2, ArrowRight
@@ -23,7 +23,6 @@ const WalletInterface: React.FC<WalletInterfaceProps> = ({ user, onBack }) => {
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await new Promise(r => setTimeout(r, 800)); // Simulando delay de rede bancária
             const data = await Backend.getUserWallet(user.id, user.role);
             setBalance(data.balance);
             setTransactions(data.transactions);

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ProfessionalDashboardStats, User, PortfolioItem, ServiceItem } from '../types';
 import { TrendingUp, Users, Star, Briefcase, Sparkles, Wallet, ArrowUpRight, ShieldCheck, Crown, Eye, ChevronRight, BarChart3, CalendarCheck, Image as ImageIcon, Upload, X, Save, LayoutTemplate, Plus, Loader2, User as UserIcon, Trash2, DollarSign, Tag, Camera } from 'lucide-react';
 import { useToast } from '../components/ToastContext';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 
 interface ProfessionalDashboardProps {
     stats: ProfessionalDashboardStats;

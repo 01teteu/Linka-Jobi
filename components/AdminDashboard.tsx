@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AdminStats, User, ServiceCategory, ServiceSubItem, ChatSession, UserRole } from '../types';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import ChatInterface from './ChatInterface';
 import { 
     Users, DollarSign, Ban, ShieldCheck, Search, Activity, Settings, 

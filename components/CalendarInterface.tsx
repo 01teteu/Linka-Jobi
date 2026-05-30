@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Appointment, User } from '../types';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import { Clock, MapPin, ChevronRight, Loader2, PartyPopper, ChevronLeft, List, Grid } from 'lucide-react';
 import { useToast } from './ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,8 +22,6 @@ const CalendarInterface: React.FC<CalendarInterfaceProps> = ({ user, onViewPropo
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            // Simulate network delay
-            await new Promise(r => setTimeout(r, 600));
             try {
                 const apps = await Backend.getUserAppointments(user.id);
                 // Convert server UTC timestamp to local date/time for display

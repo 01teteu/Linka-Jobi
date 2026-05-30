@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, Check, MapPin, DollarSign, ListFilter, Sparkles, Loader2, User } from 'lucide-react';
 import { Proposal, ServiceSubItem, User as UserType } from '../types';
-import { Backend } from '../services/mockBackend';
-import { enhanceProposalDescription, suggestServiceCategory } from '../services/geminiService';
+import { Backend } from '..//services/api/';
 import { useToast } from './ToastContext';
 
 interface CreateProposalModalProps {
@@ -17,7 +16,6 @@ interface CreateProposalModalProps {
 const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClose, onSubmit, initialCategory, targetProfessional }) => {
   const [step, setStep] = useState(1);
   const [catalog, setCatalog] = useState<ServiceSubItem[]>([]);
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCepLoading, setIsCepLoading] = useState(false);
   const [cepError, setCepError] = useState('');
@@ -53,7 +51,7 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
       if (value.length === 8) {
           setIsCepLoading(true);
           try {
-              const response = await fetch(`/api/cep/${value}`);
+              const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/cep/${value}`);
               if (!response.ok) throw new Error('CEP não encontrado');
               const data = await response.json();
               
@@ -88,29 +86,6 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
         }
     }
   }, [isOpen, initialCategory, targetProfessional]);
-
-  const handleAiMagic = async () => {
-      if (!formData.description || formData.description.length < 3) return;
-      
-      setIsAiLoading(true);
-      try {
-          const enhancedText = await enhanceProposalDescription(formData.description);
-          setFormData(prev => ({ ...prev, description: enhancedText }));
-          
-          if (!targetProfessional) {
-              const suggestedCat = await suggestServiceCategory(formData.description);
-              if (suggestedCat) {
-                  const match = catalog.find(c => c.name.toLowerCase().includes(suggestedCat.toLowerCase()));
-                  if (match) setFormData(prev => ({ ...prev, areaTag: match.name }));
-              }
-          }
-      } catch (error) {
-          console.error("AI Error", error);
-          addToast("Não foi possível usar a IA agora.", "info");
-      } finally {
-          setIsAiLoading(false);
-      }
-  };
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
@@ -201,19 +176,6 @@ const CreateProposalModal: React.FC<CreateProposalModalProps> = ({ isOpen, onClo
                             value={formData.description}
                             onChange={(e) => setFormData({...formData, description: e.target.value})}
                         />
-                        
-                        <button 
-                            onClick={handleAiMagic}
-                            disabled={isAiLoading || !formData.description}
-                            className={`absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider shadow-lg transition-all ${
-                                isAiLoading 
-                                ? 'bg-gray-100 text-gray-400' 
-                                : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:scale-105 active:scale-95'
-                            }`}
-                        >
-                            {isAiLoading ? <Loader2 className="animate-spin w-4 h-4"/> : <Sparkles className="w-4 h-4" />}
-                            {isAiLoading ? 'Pensando...' : 'Melhorar com IA'}
-                        </button>
                     </div>
                 </div>
                 <button onClick={() => setStep(2)} disabled={!formData.areaTag || !formData.description} className="w-full bg-primary text-white h-16 rounded-full font-bold text-lg shadow-xl disabled:opacity-30 transition-all">Próximo</button>

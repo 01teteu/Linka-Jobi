@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, LevelData, UserRole, Review } from '../types';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import { 
     Trophy, ChevronLeft, Lock, Star, Zap, ShieldCheck, 
     Crown, Rocket, CheckCircle2, Award, Sparkles, AlertTriangle, User as UserIcon
@@ -16,21 +16,36 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ user, onBack }) => {
     const [data, setData] = useState<LevelData | null>(null);
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'progress' | 'reviews'>('progress');
 
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await new Promise(r => setTimeout(r, 600)); // Simula animação
+            setError(null);
             try {
-                const [gamiData, profileData] = await Promise.all([
-                    Backend.getUserGamification(user.id, user.role),
-                    Backend.getPublicProfile(user.id)
-                ]);
-                setData(gamiData);
-                setReviews(profileData.reviews || []);
+                const gamiData = await Backend.getUserGamification(user.id, user.role).catch(e => {
+                    console.error("Erro gamificação:", e);
+                    return null;
+                });
+                
+                const profileData = await Backend.getPublicProfile(user.id).catch(e => {
+                    console.error("Erro reviews:", e);
+                    return { reviews: [] };
+                });
+
+                if (gamiData) {
+                    setData(gamiData);
+                } else {
+                    setError("Não foi possível carregar os dados de gamificação.");
+                }
+                
+                if (profileData) {
+                    setReviews(profileData.reviews || []);
+                }
             } catch (e) {
                 console.error(e);
+                setError("Ocorreu um erro inesperado.");
             } finally {
                 setLoading(false);
             }
@@ -47,7 +62,16 @@ const GamificationHub: React.FC<GamificationHubProps> = ({ user, onBack }) => {
         );
     }
 
-    if (!data) return null;
+    if (error || !data) {
+        return (
+            <div className="w-full px-6 py-8 pb-32 flex flex-col items-center justify-center text-center">
+                <AlertTriangle className="w-16 h-16 text-orange-400 mb-4" />
+                <h2 className="text-xl font-bold text-textMain mb-2">Erro ao carregar Clube</h2>
+                <p className="text-textMuted mb-6 text-sm">{error || "Sua conta ainda não possui dados do Linka Clube."}</p>
+                <button onClick={onBack} className="bg-primary text-white font-bold py-3 px-6 rounded-xl">Voltar</button>
+            </div>
+        );
+    }
 
     // Definição de cores por nível
     const levelColors: Record<string, string> = {

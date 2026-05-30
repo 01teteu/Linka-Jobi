@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatSession, Message, User, ProposalStatus, UserRole } from '../types';
 import { Send, AlertTriangle, CheckCheck, MessageSquare, ChevronLeft, CheckCircle2, Paperclip, Calendar, Image as ImageIcon, X, Phone, MoreVertical, ShieldCheck, DollarSign, Star, ChevronDown, ChevronUp, Lock } from 'lucide-react';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import ScheduleModal from './ScheduleModal';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -30,6 +30,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
     const [activeTab, setActiveTab] = useState<'messages' | 'budget'>('messages');
     const [proposedPrice, setProposedPrice] = useState('');
     const [showMoreOptions, setShowMoreOptions] = useState(false);
+    const [typingUsers, setTypingUsers] = useState<{ [key: number]: string }>({});
+    const typingTimeoutRef = useRef<{ [key: number]: NodeJS.Timeout }>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const socketRef = useRef<Socket | null>(null);
@@ -55,11 +57,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
 
     // Inicializa Socket
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
         socketRef.current = io('/', {
-            auth: { token }
+            withCredentials: true
+        });
+
+        socketRef.current.on('connect_error', async (err: Error) => {
+            if (err.message === 'Authentication error') {
+                console.warn('Socket auth failed. Attempting token refresh...');
+                try {
+                    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.token) {
+                            if (socketRef.current) {
+                                socketRef.current.connect();
+                            }
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Refresh token error:', e);
+                }
+                
+                // If refresh failed
+                window.location.href = '/?login=true';
+            }
         });
 
         socketRef.current.on('connect', () => {
@@ -105,7 +131,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
             }
         });
 
+        socketRef.current.on('typing', (data: { userId: number, isTyping: boolean }) => {
+            setTypingUsers(prev => {
+                const newState = { ...prev };
+                if (data.isTyping) {
+                    const participant = chatsRef.current.find(c => c.id === activeChatId)?.participants.find(p => p.id === data.userId);
+                    if (participant) {
+                        newState[data.userId] = participant.name;
+                        // Auto clear typing status after 3 seconds
+                        if (typingTimeoutRef.current[data.userId]) clearTimeout(typingTimeoutRef.current[data.userId]);
+                        typingTimeoutRef.current[data.userId] = setTimeout(() => {
+                            setTypingUsers(curr => {
+                                const st = { ...curr };
+                                delete st[data.userId];
+                                return st;
+                            });
+                        }, 3000);
+                    }
+                } else {
+                    delete newState[data.userId];
+                }
+                return newState;
+            });
+        });
+
         return () => {
+            Object.values(typingTimeoutRef.current).forEach(clearTimeout);
             socketRef.current?.disconnect();
         };
     }, [onRefresh]); // Removed chats/user/onReview from dependency to avoid reconnects
@@ -216,18 +267,40 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
         }
     };
 
+    const formatTimestamp = (ts: string) => {
+        if (!ts) return '';
+        if (!ts.includes('-') && ts.includes(':')) return ts; // Already HH:mm
+        try {
+            return new Date(ts).toLocaleTimeString('pt-BR', { 
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+        } catch {
+            return ts;
+        }
+    };
+
+    // Emit typing events
+    const emitTyping = (isTyping: boolean) => {
+        if (socketRef.current && activeChatId) {
+            socketRef.current.emit('typing', { chatId: activeChatId, isTyping });
+        }
+    };
+
     const handleSendText = async (e: React.FormEvent) => {
         e.preventDefault();
         const text = newMessage.trim();
         if(!text) return;
         
         setNewMessage('');
+        emitTyping(false); // Clear typing state when sent
         
         const tempMsg: Message = {
             id: -(Date.now()),
             senderId: user.id,
             text: text,
-            timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            timestamp: new Date().toISOString(),
             type: 'text'
         };
         setLocalMessages(prev => [...prev, tempMsg]);
@@ -249,7 +322,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
             id: -(Date.now()),
             senderId: user.id,
             text: 'Imagem enviada',
-            timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            timestamp: new Date().toISOString(),
             type: 'image',
             mediaUrl: localUrl
         };
@@ -271,7 +344,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
             id: -(Date.now()),
             senderId: user.id,
             text: text,
-            timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            timestamp: new Date().toISOString(),
             type: 'schedule',
             scheduleData: { date, time, status: 'PENDING' }
         };
@@ -292,7 +365,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
             id: -(Date.now()),
             senderId: user.id,
             text: 'Agendamento Confirmado!',
-            timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            timestamp: new Date().toISOString(),
             type: 'text'
         };
         
@@ -661,7 +734,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
                                                     {renderMessageContent(msg, isMe)}
 
                                                     <div className={`text-[9px] mt-1.5 flex items-center gap-1 justify-end font-bold uppercase ${isMe ? 'text-white/70' : 'text-gray-400'}`}>
-                                                        {msg.timestamp}
+                                                        {formatTimestamp(msg.timestamp)}
                                                         {isMe && <CheckCheck className="w-3 h-3 opacity-80" />}
                                                     </div>
                                                 </div>
@@ -670,6 +743,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
                                     })}
                                     <div ref={messagesEndRef} className="h-4" />
                                 </div>
+                                
+                                {/* Typing Indicator */}
+                                {Object.values(typingUsers).length > 0 && (
+                                    <div className="px-6 pb-2 bg-transparent text-xs text-textMuted font-medium italic animate-pulse">
+                                        {Object.values(typingUsers).join(', ')} {Object.values(typingUsers).length > 1 ? 'estão ' : 'está '} digitando...
+                                    </div>
+                                )}
 
                                 {/* Input Area Flutuante */}
                                 <div className="p-4 sm:p-6 bg-transparent sticky bottom-0 z-20">
@@ -713,7 +793,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
                                         <div className="flex-1 bg-gray-50 rounded-[1.5rem] border border-transparent focus-within:border-primary/20 focus-within:bg-white transition-all flex items-center mb-1">
                                             <textarea 
                                                 value={newMessage}
-                                                onChange={(e) => setNewMessage(e.target.value)}
+                                                onChange={(e) => {
+                                                    setNewMessage(e.target.value);
+                                                    emitTyping(e.target.value.trim().length > 0);
+                                                }}
+                                                onBlur={() => emitTyping(false)}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter' && !e.shiftKey) {
                                                         e.preventDefault();

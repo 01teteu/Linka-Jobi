@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { X, Camera, Save, User as UserIcon, MapPin, Phone, HelpCircle, FileText, ChevronRight, LogOut, Loader2, UploadCloud, ShieldCheck, Mail, CheckCircle2, AlertCircle, Send } from 'lucide-react';
-import { Backend } from '../services/mockBackend';
+import { Backend, apiFetch } from '../services/api';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -44,7 +44,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
 
     const fetchEmailStatus = async () => {
         try {
-            const res = await fetch('/api/health');
+            const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/health`);
             const data = await res.json();
             setEmailStatus(data.email);
         } catch (err) {
@@ -57,16 +57,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
         setIsTestingEmail(true);
         setTestEmailResult(null);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/debug/test-email', {
+            const data = await apiFetch('/api/debug/test-email', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
                 body: JSON.stringify({ email: user.email })
             });
-            const data = await res.json();
             if (data.success) {
                 setTestEmailResult('success');
             } else {

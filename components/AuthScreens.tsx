@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { UserRole } from '../types';
+import { UserRole, ServiceSubItem } from '../types';
 import { Mail, Lock, User, ArrowRight, Hammer, ShieldCheck, Eye, EyeOff, Loader2, Star, CheckCircle2, ArrowLeft, Phone, MapPin, Briefcase, Check } from 'lucide-react';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '../services/api';
 import { useToast } from './ToastContext'; 
-import { DEFAULT_SERVICES } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AuthScreenProps {
   onLogin: (user: any) => void;
+  services: ServiceSubItem[];
 }
 
 const applyPhoneMask = (value: string) => {
@@ -23,7 +23,7 @@ const applyCepMask = (value: string) => {
     return numbers.replace(/^(\d{5})(\d)/, '$1-$2');
 };
 
-const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
+const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin, services }) => {
   const { addToast } = useToast();
   const [viewState, setViewState] = useState<'login' | 'register'>('login');
   const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
       setLoadingCep(true);
       setCepError('');
       try {
-          const response = await fetch(`/api/cep/${cepValue}`);
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/cep/${cepValue}`);
           if (!response.ok) {
               if (response.status === 404) throw new Error('CEP não encontrado');
               throw new Error('Erro na busca');
@@ -383,7 +383,7 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                                    {DEFAULT_SERVICES.map(s => {
+                                    {services.map(s => {
                                         const isSelected = specialties.includes(s.name);
                                         return (
                                             <button

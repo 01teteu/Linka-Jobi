@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, PortfolioItem, Review, ServiceItem } from '../types';
-import { Backend } from '../services/mockBackend';
+import { Backend } from '..//services/api/';
 import { X, Star, MessageSquare, ChevronRight, Loader2, ImageOff, DollarSign, Tag, Heart, Flag, Ban, AlertTriangle } from 'lucide-react';
 import { useToast } from './ToastContext';
 

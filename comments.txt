@@ -1,0 +1,10 @@
+157:        // Deduplicate services by ID and Name
+194:  // Socket.io Connection for Real-time Notifications
+209:              // Play notification sound if available (optional)
+226:              // Se for notificação de mensagem, atualiza a lista de chats
+257:              // Optimistic update or reload
+360:              await refreshChats(); // Ensure chat list is updated
+462:              await refreshChats(); // Ensure chat list is updated
+783:                                // Trigger refresh manually since state update is async and we need to pass the new value or wait for effect
+784:                                // But refreshData uses the state variable, so we need to wait for re-render or pass arg.
+785:                                // Simpler: just set state, and add filterBySpecialty to useEffect dependency of refreshData call

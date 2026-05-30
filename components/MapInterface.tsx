@@ -37,7 +37,8 @@ const MapInterface: React.FC<MapInterfaceProps> = ({ professionals, onSelectProf
   const requestLocation = () => {
     if (!navigator.geolocation) {
         console.error("Geolocalização não suportada pelo navegador.");
-        // Mantém em checking ou mostra erro específico se desejar
+        setLocationStatus('denied');
+        setUserLocation([-23.5505, -46.6333]); // Fallback São Paulo
         return;
     }
 
@@ -51,7 +52,8 @@ const MapInterface: React.FC<MapInterfaceProps> = ({ professionals, onSelectProf
         },
         (error) => {
             console.warn("Geolocalização negada ou erro:", error);
-            // Mantém em 'checking' (loop) mas loga o erro
+            setLocationStatus('denied');
+            setUserLocation([-23.5505, -46.6333]); // Fallback São Paulo
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );

@@ -1,7 +1,6 @@
 import { User, Proposal, UserRole, Notification, ServiceCategory, ServiceSubItem, Appointment, AdminStats, PortfolioItem, Review } from '../types';
-import { DEFAULT_CATEGORIES, DEFAULT_SERVICES, TOP_PROFESSIONALS } from '../constants';
 
-const BASE_URL = ''; 
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // --- API Client Puro ---
 
@@ -27,12 +26,9 @@ export const getCookie = (name: string) => {
 };
 
 const getHeaders = (isMultipart = false, method = 'GET') => {
-    const token = localStorage.getItem('token');
     const csrfToken = getCookie('csrf-token');
     
-    const headers: any = { 
-        'Authorization': token ? `Bearer ${token}` : '' 
-    };
+    const headers: any = {};
     
     if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
         headers['X-CSRF-Token'] = csrfToken;
@@ -68,7 +64,8 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, isRe
 
     try {
         let response = await fetch(url, { 
-            ...options, 
+            ...options,
+            credentials: 'same-origin',
             headers: { 
                 ...getHeaders(isFormData, method), 
                 ...(options.headers || {}) 
@@ -81,27 +78,27 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, isRe
             try {
                 const refreshResponse = await fetch(`${BASE_URL}/api/auth/refresh`, { 
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' }
                 });
                 
                 if (refreshResponse.ok) {
                     const refreshData = await refreshResponse.json();
                     if (refreshData.token) {
-                        localStorage.setItem('token', refreshData.token);
-                        logger.info('Token refreshed successfully.');
+                        logger.warn('Token refreshed successfully.');
                         // Retry the original request
                         return await apiFetch(endpoint, options, true);
                     }
                 }
                 
-                // If refresh fails or returns no token, redirect to login
+                // If refresh fails or returns no token, clear cookie by logout or redirect to login
                 logger.error('Token refresh failed. Redirecting to login.');
-                localStorage.removeItem('token');
+                await fetch(`${BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' }).catch(()=>{});
                 window.location.href = '/?login=true';
                 return null;
             } catch (e) {
                 logger.error("Failed to refresh token", e);
-                localStorage.removeItem('token');
+                await fetch(`${BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' }).catch(()=>{});
                 window.location.href = '/?login=true';
                 return null;
             }
@@ -135,7 +132,6 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, isRe
         }
 
         if (response.status === 401) { 
-            localStorage.removeItem('token'); 
             // Use the actual error from server if available (e.g. "Senha incorreta")
             throw new Error(data?.error || "Sessão expirada. Faça login novamente."); 
         }
@@ -175,8 +171,6 @@ export const Backend = {
 
     // Auth
     init: async () => {
-        const token = localStorage.getItem('token');
-        if (!token) return null;
         try {
             const data = await apiFetch('/api/me');
             return { user: data.user };
@@ -190,7 +184,6 @@ export const Backend = {
             method: 'POST', 
             body: JSON.stringify({ email, senha: password || '123456' }) 
         });
-        if (res.token) localStorage.setItem('token', res.token);
         return res;
     },
 
@@ -199,7 +192,6 @@ export const Backend = {
             method: 'POST', 
             body: JSON.stringify(userData) 
         });
-        if (res.token) localStorage.setItem('token', res.token);
         return res;
     },
 
@@ -221,20 +213,35 @@ export const Backend = {
         return res.url;
     },
 
-    // Catálogo (Fallback para constantes se DB estiver vazio, apenas para UI não quebrar)
+    // Catálogo
     getCategories: async () => {
         try {
             const res = await apiFetch('/api/categories');
-            return res.length > 0 ? res : DEFAULT_CATEGORIES;
-        } catch { return DEFAULT_CATEGORIES; }
+            return Array.isArray(res) ? res : [];
+        } catch { return []; }
     },
     
     getServices: async () => {
         try {
             const res = await apiFetch('/api/services');
-            return res.length > 0 ? res : DEFAULT_SERVICES;
-        } catch { return DEFAULT_SERVICES; }
+            return Array.isArray(res) ? res : [];
+        } catch { return []; }
     },
+
+    searchProfessionals: async (lat?: number, lng?: number, radius?: number, query?: string) => {
+        try {
+            let url = `/api/professionals/search?`;
+            const params = new URLSearchParams();
+            if (lat !== undefined) params.append('lat', String(lat));
+            if (lng !== undefined) params.append('lng', String(lng));
+            if (radius !== undefined && radius !== Infinity) params.append('radius', String(radius));
+            if (query) params.append('specialty', query);
+            
+            const res = await apiFetch(url + params.toString());
+            return Array.isArray(res) ? res : [];
+        } catch { return []; }
+    },
+
 
     // Propostas & Jobs
     getProposals: async (area?: string, page: number = 1, limit: number = 10, lat?: number, lng?: number, radius?: number, contractorId?: number) => {
@@ -328,8 +335,8 @@ export const Backend = {
     getTopProfessionals: async () => {
         try {
             const res = await apiFetch('/api/professionals/top');
-            return res.length > 0 ? res : TOP_PROFESSIONALS;
-        } catch { return TOP_PROFESSIONALS; }
+            return Array.isArray(res) ? res : [];
+        } catch { return []; }
     },
 
     getPublicProfile: async (userId: number): Promise<{user: User, portfolio: PortfolioItem[], reviews: Review[], services?: ServiceItem[]}> => {

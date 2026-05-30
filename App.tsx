@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Proposal, ProposalStatus, AdminStats, ProfessionalDashboardStats, ServiceCategory, ServiceSubItem, ChatSession, Notification } from './types';
-import { Backend, getCookie } from './services/mockBackend'; 
+import { Backend, getCookie } from './/services/api/'; 
 import { useToast } from './components/ToastContext';
 import ProposalCard from './components/ProposalCard';
 import CreateProposalModal from './components/CreateProposalModal';
@@ -21,7 +21,6 @@ import MapInterface from './components/MapInterface';
 import CalendarInterface from './components/CalendarInterface'; 
 import GamificationHub from './components/GamificationHub'; 
 import PortfolioRequirementModal from './components/PortfolioRequirementModal';
-import { DEFAULT_CATEGORIES, DEFAULT_SERVICES } from './constants'; 
 
 import { 
   Home, Search, User as UserIcon, 
@@ -34,24 +33,13 @@ import { motion } from 'framer-motion';
 
 const PAGE_SIZE = 10;
 
-const MOCK_PRO_STATS: ProfessionalDashboardStats = {
+const EMPTY_PRO_STATS: ProfessionalDashboardStats = {
     totalEarningsMonth: 0,
-    totalEarningsToday: 150.00,
-    completedJobsMonth: 12,
-    profileViews: 145,
-    chartData: [
-        { day: 'Seg', value: 150, jobs: 1 },
-        { day: 'Ter', value: 450, jobs: 3 },
-        { day: 'Qua', value: 0, jobs: 0 },
-        { day: 'Qui', value: 300, jobs: 2 },
-        { day: 'Sex', value: 600, jobs: 4 },
-        { day: 'Sáb', value: 1200, jobs: 5 },
-        { day: 'Dom', value: 0, jobs: 0 },
-    ],
-    recentReviews: [
-        { id: 101, proposalId: 1, reviewerId: 50, targetId: 2, reviewerName: "Mariana S.", rating: 5, comment: "Excelente profissional!", createdAt: new Date().toISOString() },
-        { id: 102, proposalId: 2, reviewerId: 51, targetId: 2, reviewerName: "Carlos B.", rating: 4, comment: "Bom trabalho, chegou no horário.", createdAt: new Date().toISOString() }
-    ]
+    totalEarningsToday: 0,
+    completedJobsMonth: 0,
+    profileViews: 0,
+    chartData: [],
+    recentReviews: []
 };
 
 const App: React.FC = () => {
@@ -87,17 +75,17 @@ const App: React.FC = () => {
   const [browsingCategory, setBrowsingCategory] = useState<string | null>(null);
   const [searchViewMode, setSearchViewMode] = useState<'list' | 'map'>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchProfessionalResults, setSearchProfessionalResults] = useState<User[]>([]);
+  const [isSearchingProfessionals, setIsSearchingProfessionals] = useState(false);
   const [distanceRadius, setDistanceRadius] = useState<number | 'Infinity'>('Infinity');
   const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState(false);
   const [filterBySpecialty, setFilterBySpecialty] = useState(true);
   const [targetChatId, setTargetChatId] = useState<number | null>(null);
-  const [professionalStats, setProfessionalStats] = useState<ProfessionalDashboardStats>(MOCK_PRO_STATS);
+  const [professionalStats, setProfessionalStats] = useState<ProfessionalDashboardStats>(EMPTY_PRO_STATS);
 
   useEffect(() => {
     const initApp = async () => {
         try {
-            await new Promise(r => setTimeout(r, 800));
-            
             const session = await Backend.init();
             if (session && session.user) {
                 setUser(session.user);
@@ -134,6 +122,33 @@ const App: React.FC = () => {
       }
   };
 
+  useEffect(() => {
+      const searchProfessionals = async () => {
+          if (!searchQuery.trim()) {
+              setSearchProfessionalResults([]);
+              return;
+          }
+          setIsSearchingProfessionals(true);
+          try {
+              const radius = distanceRadius === 'Infinity' ? undefined : Number(distanceRadius);
+              const pros = await (Backend as any).searchProfessionals(user.latitude, user.longitude, radius, searchQuery);
+              setSearchProfessionalResults(pros || []);
+          } catch (e) {
+              setSearchProfessionalResults([]);
+          } finally {
+              setIsSearchingProfessionals(false);
+          }
+      };
+
+      const delayDebounceFn = setTimeout(() => {
+          searchProfessionals();
+      }, 500);
+
+      return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, distanceRadius, user.latitude, user.longitude]);
+
+
+
   const loadProfessionalStats = async () => {
       if (user.role !== UserRole.PROFESSIONAL) return;
       try {
@@ -159,13 +174,13 @@ const App: React.FC = () => {
             index === self.findIndex((t) => (
                 t.id === s.id || t.name === s.name
             ))
-        ) : DEFAULT_SERVICES;
+        ) : [];
 
-        setCategories(cats && cats.length > 0 ? cats : DEFAULT_CATEGORIES);
+        setCategories(cats && cats.length > 0 ? cats : []);
         setServices(uniqueServices);
     } catch (error) {
-        setCategories(DEFAULT_CATEGORIES);
-        setServices(DEFAULT_SERVICES);
+        setCategories([]);
+        setServices([]);
     }
   };
 
@@ -194,9 +209,8 @@ const App: React.FC = () => {
   // Socket.io Connection for Real-time Notifications
   useEffect(() => {
       if (user.id !== 0) {
-          const token = localStorage.getItem('token');
           const socket = io(window.location.origin, {
-              auth: { token }
+              withCredentials: true
           });
 
           socket.on('connect', () => {
@@ -326,8 +340,10 @@ const App: React.FC = () => {
       setIsLoadMore(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
+  const handleLogout = async () => {
+    try {
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' });
+    } catch(e) {}
     setUser({ id: 0, name: '', email: '', role: UserRole.GUEST });
     setView('feed');
     setIsSettingsOpen(false);
@@ -892,22 +908,29 @@ const App: React.FC = () => {
 
             {searchQuery && (
                 <div className="space-y-4">
-                    <h3 className="font-bold text-secondary text-lg mb-4 px-1">Resultados da busca</h3>
+                    <h3 className="font-bold text-secondary text-lg mb-4 px-1 flex items-center justify-between">
+                        Resultados da busca
+                        {isSearchingProfessionals && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>}
+                    </h3>
                     <div className="grid grid-cols-1 gap-3">
-                        {services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map(s => (
-                            <button key={s.id} onClick={() => handleStartRequest(s.name)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-primary/30 transition-all text-left flex justify-between items-center group">
+                        {searchProfessionalResults.map(pro => (
+                            <button key={pro.id} onClick={() => handleViewProfile(pro)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-primary/30 transition-all text-left flex justify-between items-center group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-gray-50 rounded-xl overflow-hidden"><img src={s.imageUrl} className="w-full h-full object-cover" /></div>
-                                    <span className="font-bold text-secondary text-sm">{s.name}</span>
+                                    <img src={pro.avatarUrl} className="w-12 h-12 rounded-full border border-gray-100 object-cover" />
+                                    <div>
+                                        <span className="font-bold text-secondary text-sm block">{pro.name}</span>
+                                        <span className="text-secondaryMuted text-xs">{pro.specialty || 'Profissional'} • ⭐ {pro.rating}</span>
+                                    </div>
                                 </div>
                                 <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white transition-colors">
                                     <ArrowRight size={16} />
                                 </div>
                             </button>
                         ))}
-                        {services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                        {!isSearchingProfessionals && searchProfessionalResults.length === 0 && (
                             <div className="text-center py-12 opacity-60">
-                                <p className="font-bold text-secondaryMuted">Nenhum serviço encontrado.</p>
+                                <p className="font-bold text-secondaryMuted">Nenhum profissional encontrado.</p>
+                                <button onClick={() => { setModalInitialCategory(searchQuery); setModalOpen(true); }} className="mt-4 text-primary font-bold text-sm">Mas você pode abrir uma solicitação geral!</button>
                             </div>
                         )}
                     </div>

@@ -6,7 +6,6 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import multer from 'multer';
-import { GoogleGenAI } from "@google/genai";
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
@@ -19,7 +18,9 @@ import timeout from 'connect-timeout';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { DEFAULT_CATEGORIES, DEFAULT_SERVICES } from './constants';
+import dns from 'dns';
+
+dns.setDefaultResultOrder('ipv4first');
 
 dotenv.config({ override: true });
 
@@ -78,16 +79,14 @@ const sendMessageSchema = z.object({
     mediaUrl: z.string().url().optional(),
     scheduleData: z.any().optional()
 });
-const PORT = 3000;
-const JWT_SECRET = process.env.JWT_SECRET as string;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'linka_jobi_dev_secret_key_12345';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'linka_jobi_dev_refresh_key_12345';
 
-if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-    console.error("CRITICAL ERROR: JWT_SECRET and JWT_REFRESH_SECRET must be set in the environment.");
-    process.exit(1);
+if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
+    console.warn("⚠️ AVISO: JWT_SECRET e/ou JWT_REFRESH_SECRET não definidos. Usando chaves inseguras de fallback para desenvolvimento.");
 }
 const DB_CONNECTION = process.env.DATABASE_URL;
-const GOOGLE_API_KEY = process.env.API_KEY || process.env.VITE_GOOGLE_API_KEY;
 
 cloudinary.config({ 
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
@@ -99,7 +98,7 @@ const { Pool } = pg;
 const pool = new Pool({ 
     connectionString: DB_CONNECTION,
     ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 15000,
     idleTimeoutMillis: 30000,
     keepAlive: true
 });
@@ -170,12 +169,10 @@ const initEmail = async () => {
             
             if (isGmail && (errorMsg.includes('535-5.7.8') || errorMsg.includes('Invalid login'))) {
                 emailStatus.error = 'Gmail App Password Required';
-                console.error(`❌ SMTP Authentication Failed for ${user}: Gmail requires an "App Password" (not your regular password).`);
-                console.error(`👉 Create one here: https://myaccount.google.com/apppasswords`);
-                console.error(`👉 Make sure 2FA is enabled on your Google account first.`);
+                console.warn(`⚠️ SMTP Authentication Failed for ${user}: Gmail requires an App Password`);
             } else {
                 emailStatus.error = errorMsg;
-                console.error(`❌ SMTP Email verification failed for ${user}. Falling back to Ethereal. Error:`, err);
+                console.warn(`⚠️ SMTP setup failed. Falling back to Ethereal.`);
             }
             await setupEthereal();
         }
@@ -255,30 +252,23 @@ const createNotification = async (userId: number, type: string, title: string, m
 let isDbConnected = false;
 
 // --- RATE LIMITER ---
-const loginAttempts = new Map<string, { count: number, lastAttempt: number }>();
+const rateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+    message: { error: 'Too many requests from this IP, please try again after 15 minutes' }
+});
 
-const rateLimiter = (req: any, res: any, next: any) => {
-    const ip = req.ip || 'unknown';
-    const now = Date.now();
-    const windowMs = 15 * 60 * 1000; // 15 minutes
-    const max = 20; // limit each IP to 20 requests per windowMs
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 5, 
+    message: { error: 'Foram feitas muitas tentativas de login a partir deste IP. Por favor, tente novamente após 15 minutos.' }
+});
 
-    const record = loginAttempts.get(ip) || { count: 0, lastAttempt: now };
-
-    if (now - record.lastAttempt > windowMs) {
-        record.count = 0;
-        record.lastAttempt = now;
-    }
-
-    record.count++;
-    loginAttempts.set(ip, record);
-
-    if (record.count > max) {
-        return res.status(429).json({ error: 'Muitas tentativas. Tente novamente em 15 minutos.' });
-    }
-
-    next();
-};
+const registerRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, 
+    max: 3, 
+    message: { error: 'Você criou contas demais a partir deste IP recentemente.' }
+});
 
 pool.on('error', (err: any) => {
     if (err.code === 'ECONNRESET') {
@@ -290,10 +280,10 @@ pool.on('error', (err: any) => {
 process.on('uncaughtException', (err) => { console.error('UNCAUGHT EXCEPTION:', err); });
 process.on('unhandledRejection', (reason) => { console.error('UNHANDLED REJECTION:', reason); });
 
-let aiClient: any = null;
-if (GOOGLE_API_KEY) { aiClient = new GoogleGenAI({ apiKey: GOOGLE_API_KEY }); }
-
-app.use(cors());
+app.use(cors({
+    origin: process.env.APP_URL,
+    credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
@@ -312,24 +302,22 @@ app.use((req: any, res: any, next: any) => {
 
 // Helmet configuration
 app.use(helmet({
-    contentSecurityPolicy: {
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
         directives: {
             defaultSrc: ["'self'"],
-            // For Vite SPA, we need unsafe-inline for scripts injected during dev
-            // and potentially for some dynamic imports in production.
-            // A stricter approach would require generating a manifest of hashes during build.
             scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.tailwindcss.com"],
-            // Vite injects styles via JS using inline style tags, making unsafe-inline necessary
-            // unless we extract all CSS to a file during build and only link that file.
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
-            imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "http://res.cloudinary.com", "https://*.cloudinary.com", "https://ui-avatars.com", "https://*.tile.openstreetmap.org", "https://images.unsplash.com", "https://plus.unsplash.com", "https://via.placeholder.com"],
+            imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com", "http://res.cloudinary.com", "https://*.cloudinary.com", "https://ui-avatars.com", "https://*.tile.openstreetmap.org", "https://images.unsplash.com", "https://plus.unsplash.com", "https://via.placeholder.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            connectSrc: ["'self'"],
+            connectSrc: ["'self'", "wss:", "ws:"],
+            workerSrc: ["'self'", "blob:"]
         },
-    },
+    } : false,
     frameguard: { action: 'deny' },
     xssFilter: true,
     referrerPolicy: { policy: 'no-referrer' },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false
 }));
 
 app.use((req, res, next) => {
@@ -375,15 +363,19 @@ const csrfMiddleware = (req: any, res: any, next: any) => {
 // Apply CSRF to all routes
 app.use(csrfMiddleware);
 
-// Error handler for Timeout
-app.use((err: any, req: any, res: any, next: any) => {
-    if (req.timedout) {
-        return res.status(408).json({ error: 'Tempo de requisição esgotado' });
-    }
-    next(err);
-});
 
-const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
+
+const upload = multer({ 
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only JPEG, PNG and WEBP are allowed.'));
+        }
+    }
+});
 
 
 // --- IN-MEMORY FALLBACK (MOCK DB) ---
@@ -395,9 +387,22 @@ let memoryIdCounter = 1;
 // Auth Middleware
 const authenticate = async (req: any, res: any, next: any) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) throw new Error('No token provided');
-        const token = authHeader.split(' ')[1];
+        let token = req.cookies.token; // Check HTTPOnly cookie first
+        
+        if (!token) {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) throw new Error('No token provided');
+            token = authHeader.split(' ')[1];
+        }
+        
+        if (!token) throw new Error('No token provided');
+        
+        // Verifica token revogado
+        if (isDbConnected) {
+            const result = await pool.query('SELECT 1 FROM invalidated_tokens WHERE token = $1', [token]);
+            if ((result.rowCount || 0) > 0) return res.status(401).json({ error: "Token invalido ou revogado" });
+        }
+        
         const decoded: any = jwt.verify(token, JWT_SECRET);
         
         if (isDbConnected) {
@@ -468,7 +473,7 @@ function mapProposalToFrontend(p: any, currentUserId?: number) {
     };
 }
 
-// ✅ CEP → Coordenadas via BrasilAPI com Fallback para ViaCEP
+// ✅ CEP → Coordenadas via BrasilAPI com Fallback para ViaCEP + Nominatim para Geocoding
 async function getCoordinatesFromCep(cep: string) {
     const cleanCep = cep.replace(/\D/g, '');
     if (cleanCep.length !== 8) return null;
@@ -499,6 +504,8 @@ async function getCoordinatesFromCep(cep: string) {
             console.warn('BrasilAPI v2 falhou, tentando v1...');
         }
 
+        let addressData: any = null;
+
         // 2. Tenta BrasilAPI v1 (apenas endereço)
         try {
             const responseV1 = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCep}`, {
@@ -507,9 +514,7 @@ async function getCoordinatesFromCep(cep: string) {
             if (responseV1.ok) {
                 const dataV1: any = await responseV1.json();
                 console.log(`✅ BrasilAPI v1 sucesso: ${dataV1.city}`);
-                return {
-                    lat: null,
-                    lng: null,
+                addressData = {
                     city: dataV1.city,
                     state: dataV1.state,
                     neighborhood: dataV1.neighborhood || null,
@@ -522,25 +527,57 @@ async function getCoordinatesFromCep(cep: string) {
         }
 
         // 3. Fallback para ViaCEP (extremamente estável)
-        try {
-            const responseVia = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-            if (responseVia.ok) {
-                const dataVia: any = await responseVia.json();
-                if (!dataVia.erro) {
-                    console.log(`✅ ViaCEP sucesso: ${dataVia.localidade}`);
-                    return {
-                        lat: null,
-                        lng: null,
-                        city: dataVia.localidade,
-                        state: dataVia.uf,
-                        neighborhood: dataVia.bairro || null,
-                        street: dataVia.logradouro || null,
-                        cidade: `${dataVia.localidade}, ${dataVia.uf}`
-                    };
+        if (!addressData) {
+            try {
+                const responseVia = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+                if (responseVia.ok) {
+                    const dataVia: any = await responseVia.json();
+                    if (!dataVia.erro) {
+                        console.log(`✅ ViaCEP sucesso: ${dataVia.localidade}`);
+                        addressData = {
+                            city: dataVia.localidade,
+                            state: dataVia.uf,
+                            neighborhood: dataVia.bairro || null,
+                            street: dataVia.logradouro || null,
+                            cidade: `${dataVia.localidade}, ${dataVia.uf}`
+                        };
+                    }
                 }
+            } catch (e) {
+                console.error('ViaCEP falhou:', e);
             }
-        } catch (e) {
-            console.error('ViaCEP falhou:', e);
+        }
+
+        if (addressData) {
+            // Geocode using Nominatim
+            try {
+                const query = `${addressData.street ? addressData.street+',' : ''} ${addressData.city}, ${addressData.state}, Brazil`;
+                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+                    headers: { 'User-Agent': 'LinkaJobi/1.0' }
+                });
+                if (geoRes.ok) {
+                    const geoData: any = await geoRes.json();
+                    if (geoData && geoData.length > 0) {
+                        addressData.lat = parseFloat(geoData[0].lat);
+                        addressData.lng = parseFloat(geoData[0].lon);
+                    } else {
+                        // Fallback to city center
+                        const cityRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressData.city + ', ' + addressData.state + ', Brazil')}&limit=1`, {
+                           headers: { 'User-Agent': 'LinkaJobi/1.0' }
+                        });
+                        if (cityRes.ok) {
+                            const cityData: any = await cityRes.json();
+                            addressData.lat = cityData.length > 0 ? parseFloat(cityData[0].lat) : null;
+                            addressData.lng = cityData.length > 0 ? parseFloat(cityData[0].lon) : null;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Nominatim falhou:', e);
+                addressData.lat = null;
+                addressData.lng = null;
+            }
+            return addressData;
         }
 
         console.warn(`❌ CEP ${cleanCep} não encontrado em nenhuma API.`);
@@ -603,78 +640,23 @@ app.get('/api/cep/:cep', async (req, res) => {
 });
 
 app.get('/api/categories', async (_req, res) => {
-    if (!isDbConnected) return res.json(DEFAULT_CATEGORIES);
+    if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM categories ORDER BY name');
         if (result.rowCount === 0) throw new Error("Empty");
         res.json(result.rows.map((r: any) => ({ id: r.id, name: r.name, imageUrl: r.image_url })));
-    } catch { res.json(DEFAULT_CATEGORIES); }
+    } catch { res.json([]); }
 });
 
 app.get('/api/services', async (_req, res) => {
-    if (!isDbConnected) return res.json(DEFAULT_SERVICES);
+    if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM services WHERE is_active = true');
         if (result.rowCount === 0) throw new Error("Empty");
         res.json(result.rows.map((r: any) => ({ id: r.id, categoryId: r.category_id, name: r.name, emoji: r.emoji, isActive: r.is_active, imageUrl: r.image_url })));
-    } catch { res.json(DEFAULT_SERVICES); }
+    } catch { res.json([]); }
 });
 
-// ✅ Debug Route to Force Create Admin
-app.get('/api/debug/create-admin', async (_req, res) => {
-    try {
-        const email = 'suporte@linka.com';
-        const password = 'admin123';
-        const hash = await bcrypt.hash(password, 10);
-        
-        if (isDbConnected) {
-            // Try to update first
-            const updateRes = await pool.query(
-                `UPDATE users SET senha_hash = $1, role = 'ADMIN' WHERE email = $2 RETURNING *`,
-                [hash, email]
-            );
-            
-            if ((updateRes.rowCount || 0) > 0) {
-                return res.json({ message: 'Admin updated in DB', user: updateRes.rows[0] });
-            } else {
-                // Insert if not exists
-                const insertRes = await pool.query(
-                    `INSERT INTO users (nome, email, senha_hash, role, avatar_url, localizacao, latitude, longitude, bio, status) 
-                     VALUES ('Suporte Linka Jobi', $1, $2, 'ADMIN', 'https://ui-avatars.com/api/?name=Suporte+Linka&background=0D8ABC&color=fff', 'Central de Suporte', 0, 0, 'Canal oficial de atendimento.', 'ACTIVE') 
-                     RETURNING *`,
-                    [email, hash]
-                );
-                return res.json({ message: 'Admin created in DB', user: insertRes.rows[0] });
-            }
-        } else {
-            const existing = MEMORY_USERS.find(u => u.email === email);
-            if (existing) {
-                existing.senha_hash = hash;
-                existing.role = 'ADMIN';
-                return res.json({ message: 'Admin updated in Memory', user: existing });
-            } else {
-                const newUser = {
-                    id: 999,
-                    nome: 'Suporte Linka Jobi',
-                    email,
-                    senha_hash: hash,
-                    role: 'ADMIN',
-                    avatar_url: 'https://ui-avatars.com/api/?name=Suporte+Linka&background=0D8ABC&color=fff',
-                    localizacao: 'Central de Suporte',
-                    latitude: 0,
-                    longitude: 0,
-                    bio: 'Canal oficial de atendimento.',
-                    status: 'ACTIVE'
-                };
-                MEMORY_USERS.push(newUser);
-                return res.json({ message: 'Admin created in Memory', user: newUser });
-            }
-        }
-    } catch (e: any) {
-        console.error(e);
-        return res.status(500).json({ error: e.message });
-    }
-});
 
 // --- AUTH ENDPOINTS ---
 app.post('/api/auth/refresh', async (req: any, res: any) => {
@@ -703,6 +685,14 @@ app.post('/api/auth/refresh', async (req: any, res: any) => {
         if (!user) return res.status(403).json({ error: 'Usuário não encontrado' });
         
         const newAccessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+        
+        res.cookie('token', newAccessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000 // 15 minutes
+        });
+        
         res.json({ token: newAccessToken });
     } catch (err) {
         res.status(403).json({ error: 'Refresh token inválido ou expirado' });
@@ -722,11 +712,12 @@ app.post('/api/auth/logout', async (req: any, res: any) => {
     }
     
     res.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+    res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
     res.json({ success: true, message: 'Logout realizado' });
 });
 
 // ✅ Login com validação (Híbrido DB/Memória)
-app.post('/api/login', rateLimiter, validate(loginSchema), async (req, res) => {
+app.post('/api/login', loginRateLimiter, validate(loginSchema), async (req, res) => {
     const { email, senha } = req.body;
     
     try {
@@ -819,6 +810,13 @@ app.post('/api/login', rateLimiter, validate(loginSchema), async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
         
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000 // 15 minutes
+        });
+        
         return res.json({ token, user: mapUserToFrontend(user) });
     } catch (err) { 
         console.error('Login Error:', err); 
@@ -827,7 +825,7 @@ app.post('/api/login', rateLimiter, validate(loginSchema), async (req, res) => {
 });
 
 // ✅ Register com validação + CEP (Híbrido DB/Memória)
-app.post('/api/register', rateLimiter, validate(registerSchema), async (req, res) => {
+app.post('/api/register', registerRateLimiter, validate(registerSchema), async (req, res) => {
     const { name, email, password, role, avatarUrl, location, phone, specialty, coordinates, cep } = req.body;
     const finalAvatarUrl = avatarUrl || null;
     
@@ -908,6 +906,13 @@ app.post('/api/register', rateLimiter, validate(registerSchema), async (req, res
             </div>
         `;
         sendEmail(user.email, 'Bem-vindo ao Linka Jobi!', welcomeHtml).catch(console.error);
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 15 * 60 * 1000 // 15 minutes
+        });
 
         return res.json({ token, user: mapUserToFrontend(user) });
 
@@ -993,7 +998,30 @@ app.put('/api/users/:id/password', authenticate, async (req: any, res) => {
 });
 
 // ✅ CORRIGIDO: Atualiza specialty + CEP + permissão + PORTFOLIO + SERVICES (Híbrido)
-app.put('/api/users/:id', authenticate, async (req: any, res) => {
+const updateProfileSchema = z.object({
+    name: z.string().optional(),
+    location: z.string().optional(),
+    phone: z.string().optional(),
+    bio: z.string().optional(),
+    avatarUrl: z.string().optional(),
+    coverUrl: z.string().optional(),
+    specialty: z.string().optional(),
+    coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
+    cep: z.string().optional(),
+    portfolio: z.array(z.object({
+        imageUrl: z.string(),
+        description: z.string().optional()
+    })).optional(),
+    services: z.array(z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        price: z.string().optional(),
+        priceUnit: z.string().optional()
+    })).optional()
+    // Notice that role, xp, rating are intentionally omitted from validation schema
+});
+
+app.put('/api/users/:id', authenticate, validate(updateProfileSchema), async (req: any, res) => {
     const { name, location, phone, bio, avatarUrl, coverUrl, specialty, coordinates, cep, portfolio, services } = req.body;
     
     // Convert params.id to number for comparison
@@ -1293,11 +1321,15 @@ app.get('/api/professionals/search', async (req: any, res) => {
         }
 
         if (specialty) { params.push(`%${specialty}%`); query += ` AND specialty ILIKE $${params.length}`; }
+        
+        let orderBy = `ORDER BY rating DESC`;
         if (lat && lng) {
             params.push(parseFloat(lat as string), parseFloat(lng as string), parseFloat(radius as string));
-            query += ` AND (6371 * acos(cos(radians($${params.length-2})) * cos(radians(latitude)) * cos(radians(longitude) - radians($${params.length-1})) + sin(radians($${params.length-2})) * sin(radians(latitude)))) <= $${params.length}`;
+            const distanceCalc = `(6371 * acos(cos(radians($${params.length-2})) * cos(radians(latitude)) * cos(radians(longitude) - radians($${params.length-1})) + sin(radians($${params.length-2})) * sin(radians(latitude))))`;
+            query += ` AND ${distanceCalc} <= $${params.length}`;
+            orderBy = `ORDER BY ${distanceCalc} ASC`;
         }
-        query += ` ORDER BY rating DESC LIMIT 20`;
+        query += ` ${orderBy} LIMIT 20`;
         const result = await pool.query(query, params);
         return res.json(result.rows.map(mapPublicUserToFrontend));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Erro na busca' }); }
@@ -1587,6 +1619,13 @@ app.post('/api/proposals/:id/accept', authenticate, async (req: any, res) => {
             
             // Increment accepted count but DO NOT change status to NEGOTIATING yet
             await pool.query('UPDATE propostas SET accepted_count = accepted_count + 1 WHERE id = $1', [id]);
+
+            // Notify contractor
+            const contractorRes = await pool.query('SELECT contratante_id, titulo FROM propostas WHERE id = $1', [id]);
+            if (contractorRes.rowCount && contractorRes.rowCount > 0) {
+                const contractorId = contractorRes.rows[0].contratante_id;
+                createNotification(contractorId, 'NEW_PROPOSAL', 'Novo Interesse!', `O profissional ${req.user.nome} tem interesse no seu serviço "${contractorRes.rows[0].titulo}".`, { proposalId: id, chatId });
+            }
         }
         return res.json({ success: true, chatId });
     } catch { res.status(500).json({ error: 'Erro ao aceitar proposta' }); }
@@ -1644,7 +1683,7 @@ app.post('/api/proposals/:id/complete', authenticate, async (req: any, res) => {
                     id: newMsg.id, 
                     senderId: 0, 
                     text: sysMsg, 
-                    timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                    timestamp: new Date(newMsg.timestamp).toISOString(), 
                     isSystem: true, 
                     type: 'text' 
                 });
@@ -1735,7 +1774,7 @@ app.get('/api/chats', authenticate, async (req: any, res) => {
                 hiredProfessionalId: row.hired_professional_id,
                 negotiation: row.negotiation,
                 participants: [{ id: row.contratante_id, name: row.c_name, avatar: row.c_avatar }, { id: row.professional_id, name: row.p_name || 'Profissional', avatar: row.p_avatar }],
-                messages: msgsRes.rows.map((m: any) => ({ id: m.id, senderId: m.sender_id || 0, text: m.texto, timestamp: new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), isSystem: m.is_system, type: m.msg_type, ...m.metadata })),
+                messages: msgsRes.rows.map((m: any) => ({ id: m.id, senderId: m.sender_id || 0, text: m.texto, timestamp: new Date(m.timestamp).toISOString(), isSystem: m.is_system, type: m.msg_type, ...m.metadata })),
                 lastMessage: row.last_msg || 'Início', unreadCount: 0,
                 isSupport: isSupport
             };
@@ -1769,7 +1808,7 @@ app.post('/api/chats/:id/negotiate', authenticate, async (req: any, res) => {
             const newMsg = msgRes.rows[0];
             io.to(`chat_${id}`).emit('new_message', { 
                 id: newMsg.id, senderId: 0, text: sysMsg, 
-                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                timestamp: new Date(newMsg.timestamp).toISOString(), 
                 isSystem: true, type: 'text' 
             });
         }
@@ -1808,7 +1847,7 @@ app.post('/api/chats/:id/negotiate/accept', authenticate, async (req: any, res) 
             const newMsg = msgRes.rows[0];
             io.to(`chat_${id}`).emit('new_message', { 
                 id: newMsg.id, senderId: 0, text: sysMsg, 
-                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                timestamp: new Date(newMsg.timestamp).toISOString(), 
                 isSystem: true, type: 'text' 
             });
         }
@@ -1844,7 +1883,7 @@ app.post('/api/chats/:id/negotiate/reject', authenticate, async (req: any, res) 
             const newMsg = msgRes.rows[0];
             io.to(`chat_${id}`).emit('new_message', { 
                 id: newMsg.id, senderId: 0, text: sysMsg, 
-                timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+                timestamp: new Date(newMsg.timestamp).toISOString(), 
                 isSystem: true, type: 'text' 
             });
         }
@@ -1869,7 +1908,7 @@ app.post('/api/messages', authenticate, validate(sendMessageSchema), async (req:
         const newMsg = resMsg.rows[0];
         const io = req.app.get('io');
         if (io) {
-            io.to(`chat_${chatId}`).emit('new_message', { id: newMsg.id, senderId: newMsg.sender_id || 0, text: newMsg.texto, timestamp: new Date(newMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), isSystem: newMsg.is_system, type: newMsg.msg_type, ...newMsg.metadata });
+            io.to(`chat_${chatId}`).emit('new_message', { id: newMsg.id, senderId: newMsg.sender_id || 0, text: newMsg.texto, timestamp: new Date(newMsg.timestamp).toISOString(), isSystem: newMsg.is_system, type: newMsg.msg_type, ...newMsg.metadata });
             // Correctly fetch professional_id from chat_sessions, not propostas
             const cp = await pool.query(`SELECT p.contratante_id, cs.professional_id FROM chat_sessions cs JOIN propostas p ON cs.proposta_id = p.id WHERE cs.id = $1`, [chatId]);
             if ((cp.rowCount || 0) > 0) {
@@ -1969,13 +2008,13 @@ app.get('/api/gamification', authenticate, async (req: any, res) => {
 
         if (!isDbConnected) {
             return res.json({
-                level: 1,
-                nextLevel: 2,
+                currentLevel: 'Bronze',
+                nextLevel: 'Prata',
                 progress: 0,
                 xp: 0,
-                nextLevelXp: 100,
-                badges: [],
-                benefits: [],
+                nextLevelXp: 1000,
+                badges: DEFAULT_BADGES.map(b => ({ ...b, unlocked: false })),
+                benefits: ['Suporte Prioritário'],
                 capReason: null
             });
         }
@@ -1991,10 +2030,17 @@ app.get('/api/gamification', authenticate, async (req: any, res) => {
         // Merge default badges with unlocked status
         let badgesList = [];
         const allBadges = await pool.query('SELECT * FROM badges');
-        badgesList = allBadges.rows.map((b: any) => ({
-            id: b.id, name: b.name, description: b.description, icon: b.icon,
-            unlocked: unlockedBadges.includes(b.id)
-        }));
+        if (allBadges.rowCount === 0) {
+            badgesList = DEFAULT_BADGES.map(b => ({
+                ...b,
+                unlocked: unlockedBadges.includes(b.id)
+            }));
+        } else {
+            badgesList = allBadges.rows.map((b: any) => ({
+                id: b.id, name: b.name, description: b.description, icon: b.icon,
+                unlocked: unlockedBadges.includes(b.id)
+            }));
+        }
 
         return res.json({ 
             currentLevel: level, 
@@ -2159,8 +2205,8 @@ app.delete('/api/admin/services/:id', authenticate, async (req: any, res) => {
 const userRateLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
     max: 10, // 10 requests per minute per user
-    keyGenerator: (req: any) => {
-        return req.user ? String(req.user.id) : req.ip; // Use user ID if authenticated, else IP
+    keyGenerator: (req: any, res: any) => {
+        return req.user ? String(req.user.id) : (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').toString();
     },
     message: { error: 'Muitas requisições. Tente novamente em um minuto.' }
 });
@@ -2169,11 +2215,7 @@ app.post('/api/upload', authenticate, userRateLimiter, timeout('2m'), upload.sin
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
     if (!process.env.CLOUDINARY_API_KEY) {
-        // Fallback para base64 se o Cloudinary não estiver configurado (útil para testes locais/preview)
-        const base64 = req.file.buffer.toString('base64');
-        const mimeType = req.file.mimetype;
-        const dataUrl = `data:${mimeType};base64,${base64}`;
-        return res.json({ url: dataUrl });
+        return res.status(500).json({ error: 'Serviço de upload não configurado.' });
     }
 
     try {
@@ -2182,26 +2224,9 @@ app.post('/api/upload', authenticate, userRateLimiter, timeout('2m'), upload.sin
             stream.end(req.file.buffer);
         });
         return res.json({ url: (uploadResult as any).secure_url });
-    } catch { res.status(500).json({ error: 'Falha no upload' }); }
-});
-
-app.post('/api/ai/enhance', authenticate, userRateLimiter, async (req: any, res) => {
-    if (!aiClient) return res.json({ text: req.body.text });
-    try {
-        const response = await aiClient.models.generateContent({ model: 'gemini-2.0-flash-lite-preview-02-05', contents: `Melhore este texto de pedido de serviço (curto e profissional): "${req.body.text}"` });
-        return res.json({ text: (response.text || '').trim() });
-    } catch { return res.json({ text: req.body.text }); }
-});
-
-app.post('/api/ai/classify', authenticate, userRateLimiter, async (req: any, res) => {
-    if (!aiClient) return res.json({ category: "" });
-    try {
-        const response = await aiClient.models.generateContent({ 
-            model: 'gemini-2.0-flash-lite-preview-02-05', 
-            contents: `Classifique o seguinte pedido de serviço em uma categoria curta (ex: Encanador, Eletricista, Design, Programação). Retorne APENAS o nome da categoria, sem aspas ou pontuação: "${req.body.text}"` 
-        });
-        return res.json({ category: (response.text || '').trim() });
-    } catch { return res.json({ category: "" }); }
+    } catch (error) { 
+        return res.status(500).json({ error: 'Falha no upload da imagem. Tente novamente.' }); 
+    }
 });
 
 // ✅ Increment Profile Views
@@ -2373,10 +2398,10 @@ async function initDB() {
                 await client.query(`ALTER TABLE propostas ADD COLUMN IF NOT EXISTS accepted_count INTEGER DEFAULT 0;`);
             } catch (e) { console.log('Migration note: accepted_count column check', e); }
 
-            // Migration: Update propostas status check constraint to allow IN_PROGRESS
+            // Migration: Update propostas status check constraint to allow IN_PROGRESS and EXPIRED
             try {
                 await client.query(`ALTER TABLE propostas DROP CONSTRAINT IF EXISTS propostas_status_check;`);
-                await client.query(`ALTER TABLE propostas ADD CONSTRAINT propostas_status_check CHECK (status IN ('OPEN', 'NEGOTIATING', 'IN_PROGRESS', 'COMPLETED'));`);
+                await client.query(`ALTER TABLE propostas ADD CONSTRAINT propostas_status_check CHECK (status IN ('OPEN', 'NEGOTIATING', 'IN_PROGRESS', 'COMPLETED', 'EXPIRED'));`);
             } catch (e) { console.log('Migration note: propostas status constraint update failed', e); }
 
             // Migration: Add views column to users
@@ -2471,60 +2496,154 @@ async function initDB() {
             console.log('✅ Database initialized successfully');
         } catch (e) {
             await client.query('ROLLBACK');
-            console.error('❌ Failed to initialize database:', e);
+            console.warn('⚠️ Failed to initialize database:', e);
         } finally { client.release(); }
     } catch (err: any) {
-        console.error('❌ Failed to connect to database:', err.message);
-        console.log('⚠️ Server running in MOCK MODE');
+        console.warn('⚠️ Server running in MOCK MODE (Failed to connect to database)');
         isDbConnected = false;
     }
 }
 
 
 async function startServer() {
-    await initDB();
+    console.log('[1/4] Iniciando servidor...');
+    console.log('[2/4] Conectando ao banco...');
+    
+    // Add a 10-second timeout for the DB initialization so the server doesn't get stuck indefinitely
+    await Promise.race([
+        initDB(),
+        new Promise(resolve => setTimeout(() => {
+            console.warn('⏳ Timeout conectando ao banco de dados (10s). O servidor vai subir em modo degradado.');
+            isDbConnected = false;
+            resolve(null);
+        }, 10000))
+    ]);
+
     try {
+        console.log('[3/4] Registrando rotas e middlewares (Vite/Static)...');
         const httpServer = createServer(app);
+        
         if (process.env.NODE_ENV !== 'production') {
             const vite = await createViteServer({ server: { middlewareMode: true, hmr: { server: httpServer, clientPort: 443 } }, appType: 'spa' });
             app.use(vite.middlewares);
         } else {
             const distPath = path.join(process.cwd(), 'dist');
             app.use(express.static(distPath));
-            app.get('*', (req, res) => {
+            app.get(/(.*)/, (req, res) => {
                 res.sendFile(path.join(distPath, 'index.html'));
             });
         }
+
+        // Global Error Handler (must be the VERY LAST middleware)
+        app.use((err: any, req: any, res: any, next: any) => {
+            console.error('Unhandled Error:', err);
+            if (req.timedout) {
+                return res.status(408).json({ error: 'Tempo de requisição esgotado' });
+            }
+            if (res.headersSent) {
+                return next(err);
+            }
+            res.status(500).json({ error: 'Internal Server Error' });
+        });
+        
         try {
             io = new Server(httpServer, { cors: { origin: "*", methods: ["GET", "POST"] } });
-            io.use((socket, next) => {
-                const token = socket.handshake.auth.token;
+            io.use(async (socket, next) => {
+                let token = socket.handshake.auth.token;
+                
+                // Fallback to cookie
+                if (!token && socket.handshake.headers.cookie) {
+                    const match = socket.handshake.headers.cookie.match(/(?:^|;\s*)token=([^;]*)/);
+                    if (match && match[1]) token = match[1];
+                }
+                
                 if (!token) return next(new Error("Authentication error"));
-                try { const decoded = jwt.verify(token, JWT_SECRET); socket.data.user = decoded; next(); }
-                catch { next(new Error("Authentication error")); }
+                
+                try {
+                    // Check revoked token
+                    if (isDbConnected) {
+                        const result = await pool.query('SELECT 1 FROM invalidated_tokens WHERE token = $1', [token]);
+                        if ((result.rowCount || 0) > 0) return next(new Error("Authentication error: revoked"));
+                    }
+                    
+                    const decoded = jwt.verify(token, JWT_SECRET); 
+                    
+                    // Check if block
+                    if (isDbConnected) {
+                        const userCheck = await pool.query('SELECT status FROM users WHERE id = $1', [(decoded as any).id]);
+                        if (userCheck.rowCount === 0 || userCheck.rows[0].status === 'BLOCKED') {
+                            return next(new Error("Authentication error: blocked"));
+                        }
+                    }
+                    
+                    socket.data.user = decoded; 
+                    next();
+                } catch { 
+                    next(new Error("Authentication error")); 
+                }
             });
             io.on('connection', (socket) => {
                 const userId = socket.data.user?.id;
+                const role = socket.data.user?.role;
                 if (userId) { console.log(`User connected: ${userId}`); socket.join(`user_${userId}`); }
-                socket.on('join_chat', (chatId) => socket.join(`chat_${chatId}`));
+                
+                socket.on('join_chat', async (chatId) => {
+                    try {
+                        if (isDbConnected && userId) {
+                            const res = await pool.query(`SELECT p.contratante_id, cs.professional_id FROM chat_sessions cs JOIN propostas p ON cs.proposta_id = p.id WHERE cs.id = $1`, [chatId]);
+                            if (res.rowCount && res.rowCount > 0) {
+                                const { contratante_id, professional_id } = res.rows[0];
+                                if (userId === contratante_id || userId === professional_id || role === 'ADMIN') {
+                                    socket.join(`chat_${chatId}`);
+                                } else {
+                                    console.warn(`Tentativa de acesso negada ao chat ${chatId} pelo usuário ${userId}`);
+                                }
+                            }
+                        } else {
+                            socket.join(`chat_${chatId}`); // Fallback for mock mode
+                        }
+                    } catch (e) {
+                        console.error('Socket join erro:', e);
+                    }
+                });
+
                 socket.on('leave_chat', (chatId) => socket.leave(`chat_${chatId}`));
+                
+                socket.on('typing', (data) => {
+                    if (data?.chatId && userId) {
+                        socket.to(`chat_${data.chatId}`).emit('typing', { userId, isTyping: data.isTyping });
+                    }
+                });
+
                 socket.on('disconnect', () => console.log(`User disconnected: ${userId}`));
             });
             app.set('io', io);
         } catch (socketErr) { console.error("❌ Failed to initialize Socket.io:", socketErr); }
 
         httpServer.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 Servidor Linka Jobi rodando na porta ${PORT}`);
+            console.log(`[4/4] 🚀 Servidor Linka Jobi rodando na porta ${PORT}`);
         });
 
-        // Cron job for cleaning up expired tokens
+        // Cron job for cleaning up expired tokens and old proposals
         cron.schedule('0 0 * * *', async () => {
+
             if (isDbConnected) {
                 try {
                     await pool.query('DELETE FROM invalidated_tokens WHERE expires_at < NOW()');
                     console.log('🧹 Cleaned up expired tokens from blacklist.');
+                    
+                    // Expire open proposals older than 30 days
+                    const expiredRes = await pool.query(`UPDATE propostas SET status = 'EXPIRED' WHERE status = 'OPEN' AND data_criacao < NOW() - INTERVAL '30 days' RETURNING id, contratante_id, titulo`);
+                    
+                    for (const prop of expiredRes.rows) {
+                        createNotification(prop.contratante_id, 'SYSTEM', 'Proposta Expirada', `Sua demanda "${prop.titulo}" expirou após 30 dias sem contratação.`, { proposalId: prop.id });
+                    }
+                    
+                    if (expiredRes.rowCount && expiredRes.rowCount > 0) {
+                        console.log(`🧹 Expired ${expiredRes.rowCount} old proposals.`);
+                    }
                 } catch (err) {
-                    console.error('❌ Error cleaning up expired tokens:', err);
+                    console.error('❌ Error cleaning up expired tokens or proposals:', err);
                 }
             }
         });
