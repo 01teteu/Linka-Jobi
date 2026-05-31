@@ -1389,7 +1389,8 @@ app.get('/api/proposals', authenticate, async (req: any, res) => {
         params.push(contractorId); 
         query += ` AND p.contratante_id = $${params.length}`; 
     } else { 
-        query += ` AND p.status = 'OPEN'`; 
+        params.push(req.user.id);
+        query += ` AND p.status = 'OPEN' AND (p.target_professional_id IS NULL OR p.target_professional_id = $${params.length})`; 
     }
     
     if (area) { 
@@ -1477,8 +1478,19 @@ app.post('/api/proposals', authenticate, validate(createProposalSchema), async (
         `;
         sendEmail(req.user.email, 'Proposta Publicada - Linka Jobi', emailHtml).catch(console.error);
 
+        // Preenche com dados do contratante para emissão correta via Socket/Response
+        newProposal.contractor_name = req.user.nome;
+        newProposal.contractor_avatar = req.user.avatar_url;
+        newProposal.contractor_email = req.user.email;
+        newProposal.contractor_phone = req.user.telefone;
+        newProposal.contractor_rating = req.user.rating;
+        newProposal.contractor_reviews_count = req.user.reviews_count;
+
         const io = req.app.get('io');
         if (io) {
+            // Emit nova proposta globalmente para profissionais (poderíamos usar salas baseadas em localização/área futuramente)
+            io.emit('new_proposal', mapProposalToFrontend(newProposal, undefined));
+
             // Notify specific professional if targeted
             if (targetProfessionalId) {
                 createNotification(targetProfessionalId, 'NEW_PROPOSAL', 'Nova Proposta Direta', `Você recebeu uma proposta direta: ${title}`, { proposalId: newProposal.id });
@@ -1546,7 +1558,10 @@ app.post('/api/proposals/:id/hire', authenticate, async (req: any, res) => {
             // Emit update to all chat rooms for this proposal to update UI
             const allChats = await pool.query('SELECT id FROM chat_sessions WHERE proposta_id = $1', [id]);
             allChats.rows.forEach((row: any) => {
-                io.to(`chat_${row.id}`).emit('proposal_update', { status: 'IN_PROGRESS', hiredProfessionalId: professionalId });
+                io.to(`chat_${row.id}`).emit('proposal_update', { status: 'IN_PROGRESS', hiredProfessionalId: professionalId, proposalId: Number(id) });
+                // Envia para as salas específicas dos usuários para os listeners principais que não estão no chat
+                io.to(`user_${req.user.id}`).emit('proposal_update', { status: 'IN_PROGRESS', hiredProfessionalId: professionalId, proposalId: Number(id) });
+                io.to(`user_${row.professional_id}`).emit('proposal_update', { status: 'IN_PROGRESS', hiredProfessionalId: professionalId, proposalId: Number(id) });
             });
         }
 
@@ -1677,7 +1692,9 @@ app.post('/api/proposals/:id/complete', authenticate, async (req: any, res) => {
             const chatRes = await pool.query('SELECT id FROM chat_sessions WHERE proposta_id = $1 AND professional_id = $2', [id, targetProId]);
             if ((chatRes.rowCount || 0) > 0) {
                 const chatId = chatRes.rows[0].id;
-                io.to(`chat_${chatId}`).emit('proposal_update', { status: 'COMPLETED', proposalId: id });
+                io.to(`chat_${chatId}`).emit('proposal_update', { status: 'COMPLETED', proposalId: Number(id) });
+                io.to(`user_${req.user.id}`).emit('proposal_update', { status: 'COMPLETED', proposalId: Number(id) });
+                io.to(`user_${targetProId}`).emit('proposal_update', { status: 'COMPLETED', proposalId: Number(id) });
                 
                 // System message
                 const sysMsg = 'Trabalho concluído pelo cliente.';

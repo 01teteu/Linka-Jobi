@@ -244,6 +244,21 @@ const App: React.FC = () => {
               }
           });
 
+          socket.on('new_proposal', (proposal: any) => {
+              if (user.role === UserRole.PROFESSIONAL) {
+                  setProposals(prev => [proposal, ...prev.filter(p => p.id !== proposal.id)]);
+              }
+          });
+
+          socket.on('proposal_update', (update: any) => {
+              setProposals(prev => prev.map(p => 
+                  p.id === update.proposalId ? { ...p, status: update.status, professionalId: update.hiredProfessionalId || p.professionalId } : p
+              ));
+              setMyProposals(prev => prev.map(p => 
+                  p.id === update.proposalId ? { ...p, status: update.status, professionalId: update.hiredProfessionalId || p.professionalId } : p
+              ));
+          });
+
           return () => {
               socket.disconnect();
           };

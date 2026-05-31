@@ -30,7 +30,7 @@ const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClo
                     color: 'text-blue-600',
                     bg: 'bg-blue-50',
                     borderColor: 'border-blue-200',
-                    label: 'Em Aberto',
+                    label: 'Aguardando propostas',
                     desc: 'Aguardando profissionais interessados.',
                     step: 1
                 };
@@ -39,18 +39,36 @@ const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ isOpen, onClo
                     color: 'text-amber-600',
                     bg: 'bg-amber-50',
                     borderColor: 'border-amber-200',
-                    label: 'Em Negociação',
+                    label: 'Em negociação',
                     desc: 'Você está conversando com um profissional.',
                     step: 2
+                };
+            case ProposalStatus.IN_PROGRESS:
+                return {
+                    color: 'text-indigo-600',
+                    bg: 'bg-indigo-50',
+                    borderColor: 'border-indigo-200',
+                    label: 'Em andamento',
+                    desc: 'O serviço está sendo executado.',
+                    step: 3
                 };
             case ProposalStatus.COMPLETED:
                 return {
                     color: 'text-green-600',
                     bg: 'bg-green-50',
                     borderColor: 'border-green-200',
-                    label: 'Finalizado',
+                    label: 'Concluído',
                     desc: 'Serviço concluído com sucesso.',
-                    step: 3
+                    step: 4
+                };
+            case ProposalStatus.EXPIRED:
+                return {
+                    color: 'text-red-600',
+                    bg: 'bg-red-50',
+                    borderColor: 'border-red-200',
+                    label: 'Expirado',
+                    desc: 'A proposta expirou sem contratação.',
+                    step: 0
                 };
             default:
                 return { color: 'text-gray-600', bg: 'bg-gray-50', borderColor: 'border-gray-200', label: 'Desconhecido', desc: '', step: 0 };

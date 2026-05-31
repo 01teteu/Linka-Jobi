@@ -53,6 +53,17 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
 
   const reputation = getReputationLevel(proposal.contractorRating || 5.0);
 
+    const getStatusLabel = (status: ProposalStatus) => {
+        switch (status) {
+            case ProposalStatus.OPEN: return 'Aguardando propostas';
+            case ProposalStatus.NEGOTIATING: return 'Em negociação';
+            case ProposalStatus.IN_PROGRESS: return 'Em andamento';
+            case ProposalStatus.COMPLETED: return 'Concluído';
+            case ProposalStatus.EXPIRED: return 'Expirado';
+            default: return 'Ocupado / Fechado';
+        }
+    };
+
   return (
     <>
       <motion.div 
@@ -70,7 +81,7 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
                     <img src={proposal.contractorAvatar} className="w-full h-full object-cover" alt="Avatar" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-sm text-secondary leading-tight">{proposal.contractorName.split(' ')[0]}</h3>
+                    <h3 className="font-bold text-sm text-secondary leading-tight">{proposal.contractorName ? proposal.contractorName.split(' ')[0] : 'Usuário'}</h3>
                     
                     {/* Reputação do Cliente */}
                     <div className="flex items-center gap-2 mt-1">
@@ -127,7 +138,7 @@ const ProposalCard: React.FC<ProposalCardProps> = ({ proposal, userRole, onAccep
             </button>
         ) : (
             <div className="w-full bg-gray-100 text-gray-400 py-3 rounded-xl font-bold text-xs uppercase tracking-widest text-center cursor-not-allowed border border-gray-200">
-                {proposal.status === ProposalStatus.OPEN ? 'Aguardando' : 'Ocupado / Fechado'}
+                {getStatusLabel(proposal.status)}
             </div>
         )}
       </motion.div>

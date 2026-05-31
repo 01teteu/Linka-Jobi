@@ -16,7 +16,8 @@ export enum ProposalStatus {
   OPEN = 'OPEN',
   NEGOTIATING = 'NEGOTIATING',
   IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED'
+  COMPLETED = 'COMPLETED',
+  EXPIRED = 'EXPIRED'
 }
 
 export interface ServiceCategory {
