@@ -92,15 +92,14 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, isRe
                 }
                 
                 // If refresh fails or returns no token, clear cookie by logout or redirect to login
-                logger.error('Token refresh failed. Redirecting to login.');
+                logger.error('Token refresh failed.');
                 await fetch(`${BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' }).catch(()=>{});
-                window.location.href = '/?login=true';
-                return null;
+                // Avoid infinite reload loop
+                throw new Error("Sessão expirada");
             } catch (e) {
                 logger.error("Failed to refresh token", e);
                 await fetch(`${BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' }).catch(()=>{});
-                window.location.href = '/?login=true';
-                return null;
+                throw new Error("Sessão expirada");
             }
         }
 

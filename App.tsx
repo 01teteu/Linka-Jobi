@@ -84,6 +84,7 @@ const App: React.FC = () => {
   const [professionalStats, setProfessionalStats] = useState<ProfessionalDashboardStats>(EMPTY_PRO_STATS);
 
   useEffect(() => {
+    console.log('App mounted');
     const initApp = async () => {
         try {
             const session = await Backend.init();

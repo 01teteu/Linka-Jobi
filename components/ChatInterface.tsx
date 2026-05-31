@@ -84,7 +84,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, chats, onRefresh, o
                 }
                 
                 // If refresh failed
-                window.location.href = '/?login=true';
             }
         });
 
