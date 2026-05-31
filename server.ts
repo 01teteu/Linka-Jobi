@@ -2426,8 +2426,7 @@ async function initDB() {
            await client.query(`CREATE TABLE IF NOT EXISTS invalidated_tokens (id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
 
             // Clear catalog tables to prevent duplicates (since we are re-seeding)
-            await client.query('DELETE FROM services');
-            await client.query('DELETE FROM categories');
+            // DELETE statements removed as requested. We use ON CONFLICT DO UPDATE.
             await client.query('DELETE FROM badges');
 
             // Ensure Admin User
@@ -2440,7 +2439,19 @@ async function initDB() {
 
             await client.query(`INSERT INTO badges (id, name, description, icon) VALUES ('badge_early_adopter','Pioneiro','Um dos primeiros usuários do Linka Jobi.','Rocket'),('badge_verified','Verificado','Documentação aprovada.','ShieldCheck'),('badge_first_job','Primeiro Job','Concluiu o primeiro serviço.','Award'),('badge_top_rated','5 Estrelas','Recebeu 10 avaliações máximas.','Star') ON CONFLICT (id) DO NOTHING;`);
 
-            await client.query(`INSERT INTO categories (id, name, image_url) VALUES ('cat_tech','Tecnologia','https://images.unsplash.com/photo-1518770660439-4636190af475'),('cat_home','Casa & Reforma','https://images.unsplash.com/photo-1581244277943-fe4a9c777189'),('cat_health','Saúde & Bem-estar','https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b'),('cat_education','Educação','https://images.unsplash.com/photo-1503676260728-1c00da094a0b'),('cat_events','Eventos & Lazer','https://images.unsplash.com/photo-1511795409834-ef04bbd61622'),('cat_business','Negócios','https://images.unsplash.com/photo-1454165804606-c3d57bc86b40'),('cat_beauty','Beleza','https://images.unsplash.com/photo-1560869713-7d0a29430803'),('cat_auto','Automotivo','https://images.unsplash.com/photo-1492144534655-ae79c964c9d7'),('cat_creative','Economia Criativa','https://images.unsplash.com/photo-1452860606245-08befc0ff44b'),('cat_community','Serviços Comunitários','https://images.unsplash.com/photo-1559027615-cd4628902d4a'),('cat_sustain','Sustentabilidade','https://images.unsplash.com/photo-1542601906990-b4d3fb778b09') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, image_url=EXCLUDED.image_url;`);
+            await client.query(`INSERT INTO categories (id, name, image_url) VALUES 
+('cat_tech','Tecnologia','https://images.unsplash.com/photo-1518770660439-4636190af475'),
+('cat_health','Saúde & Bem-estar','https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b'),
+('cat_education','Educação','https://images.unsplash.com/photo-1503676260728-1c00da094a0b'),
+('cat_beauty','Beleza','https://images.unsplash.com/photo-1560869713-7d0a29430803'),
+('cat_home','Casa & Reforma','https://images.unsplash.com/photo-1581244277943-fe4a9c777189'),
+('cat_auto','Automotivo','https://images.unsplash.com/photo-1492144534655-ae79c964c9d7'),
+('cat_events','Eventos & Lazer','https://images.unsplash.com/photo-1511795409834-ef04bbd61622'),
+('cat_business','Negócios','https://images.unsplash.com/photo-1454165804606-c3d57bc86b40'),
+('cat_community','Serviços Comunitários','https://images.unsplash.com/photo-1559027615-cd4628902d4a'),
+('cat_sustain','Sustentabilidade','https://images.unsplash.com/photo-1542601906990-b4d3fb778b09'),
+('cat_creative','Economia Criativa','https://images.unsplash.com/photo-1452860606245-08befc0ff44b')
+ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, image_url=EXCLUDED.image_url;`);
 
             await client.query(`INSERT INTO services (id, category_id, name, emoji, image_url) VALUES 
                 ('serv_dev','cat_tech','Desenvolvedor Web/App','💻','https://images.unsplash.com/photo-1498050108023-c5249f4df085'),
@@ -2450,6 +2461,32 @@ async function initDB() {
                 ('serv_marketing','cat_tech','Gestor de Tráfego','📈','https://images.unsplash.com/photo-1460925895917-afdab827c52f'),
                 ('serv_network','cat_tech','Redes de Computadores','🌐','https://images.unsplash.com/photo-1544197150-b99a580bb7a8'),
                 ('serv_security','cat_tech','Segurança Digital','🔒','https://images.unsplash.com/photo-1563013544-824ae1b704d3'),
+                ('serv_social_media','cat_tech','Social Media','📱','https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=400&auto=format&fit=crop'),
+
+                ('serv_personal','cat_health','Personal Trainer','💪','https://images.unsplash.com/photo-1517836357463-d25dfeac3438'),
+                ('serv_psy','cat_health','Psicólogo','🧠','https://images.unsplash.com/photo-1576091160399-112ba8d25d1d'),
+                ('serv_nutrition','cat_health','Nutricionista','🥗','https://images.unsplash.com/photo-1490645935967-10de6ba17061'),
+                ('serv_yoga','cat_health','Instrutor de Yoga','🧘','https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?q=80&w=400&auto=format&fit=crop'),
+                ('serv_care','cat_health','Cuidador de Idosos','👵','https://images.unsplash.com/photo-1576765608535-5f04d1e3f289'),
+                ('serv_physio','cat_health','Fisioterapeuta','🏃‍♂️','https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=400&auto=format&fit=crop'),
+                ('serv_nurse','cat_health','Enfermeiro','⚕️','https://images.unsplash.com/photo-1584982751601-97dcc096659c?q=80&w=400&auto=format&fit=crop'),
+                ('serv_doctor','cat_health','Médico a Domicílio','🩺','https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=400&auto=format&fit=crop'),
+
+                ('serv_english','cat_education','Professor de Inglês','🇺🇸','https://images.unsplash.com/photo-1546410531-bb4caa6b424d'),
+                ('serv_math','cat_education','Reforço Escolar','📚','https://images.unsplash.com/photo-1434030216411-0b793f4b4173'),
+                ('serv_music','cat_education','Aulas de Música','🎵','https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=400&auto=format&fit=crop'),
+                ('serv_math_teacher','cat_education','Professor de Matemática','➗','https://images.unsplash.com/photo-1632516643734-d029583b26c2?q=80&w=400&auto=format&fit=crop'),
+                ('serv_portuguese','cat_education','Professor de Português','📖','https://images.unsplash.com/photo-1456953180671-730af0f3fea9?q=80&w=400&auto=format&fit=crop'),
+                ('serv_computer','cat_education','Instrutor de Informática','⌨️','https://images.unsplash.com/photo-1531482615713-2afd69097998?q=80&w=400&auto=format&fit=crop'),
+
+                ('serv_makeup','cat_beauty','Maquiadora','💄','https://images.unsplash.com/photo-1522337660859-02fbefca4702?q=80&w=400&auto=format&fit=crop'),
+                ('serv_hair','cat_beauty','Cabeleireiro(a)','💇','https://images.unsplash.com/photo-1560869713-7d0a29430803'),
+                ('serv_manicure','cat_beauty','Manicure/Pedicure','💅','https://images.unsplash.com/photo-1632345031435-8727f6897d53'),
+                ('serv_barber','cat_beauty','Barbeiro','💈','https://images.unsplash.com/photo-1585747860715-2ba37e788b70?q=80&w=400&auto=format&fit=crop'),
+                ('serv_depilation','cat_beauty','Depilação','🪒','https://images.unsplash.com/photo-1570172619644-8d8d21b4a070?q=80&w=400&auto=format&fit=crop'),
+                ('serv_esthetician','cat_beauty','Esteticista','💆','https://images.unsplash.com/photo-1570535359141-86aebc2f4a3e?q=80&w=400&auto=format&fit=crop'),
+                ('serv_eyebrow','cat_beauty','Designer de Sobrancelhas','👁️','https://images.unsplash.com/photo-1616683693504-3ea7e9ad6ece?q=80&w=400&auto=format&fit=crop'),
+
                 ('serv_pedreiro','cat_home','Pedreiro','🧱','https://images.unsplash.com/photo-1541888946425-d81bb19240f5'),
                 ('serv_eletricista','cat_home','Eletricista','⚡','https://images.unsplash.com/photo-1621905251189-08b45d6a269e'),
                 ('serv_encanador','cat_home','Encanador','🔧','https://images.unsplash.com/photo-1607472586893-edb57bdc0e39'),
@@ -2457,36 +2494,45 @@ async function initDB() {
                 ('serv_diarista','cat_home','Diarista','🧹','https://images.unsplash.com/photo-1527515663462-113180287041?q=80&w=400&auto=format&fit=crop'),
                 ('serv_garden','cat_home','Jardinagem','🌿','https://images.unsplash.com/photo-1416879595882-3373a0480b5b'),
                 ('serv_furniture','cat_home','Montador de Móveis','🪑','https://images.unsplash.com/photo-1595428774223-ef52624120d2'),
-                ('serv_personal','cat_health','Personal Trainer','💪','https://images.unsplash.com/photo-1517836357463-d25dfeac3438'),
-                ('serv_psy','cat_health','Psicólogo','🧠','https://images.unsplash.com/photo-1576091160399-112ba8d25d1d'),
-                ('serv_nutrition','cat_health','Nutricionista','🥗','https://images.unsplash.com/photo-1490645935967-10de6ba17061'),
-                ('serv_yoga','cat_health','Instrutor de Yoga','🧘','https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?q=80&w=400&auto=format&fit=crop'),
-                ('serv_care','cat_health','Cuidador de Idosos','👵','https://images.unsplash.com/photo-1576765608535-5f04d1e3f289'),
-                ('serv_english','cat_education','Professor de Inglês','🇺🇸','https://images.unsplash.com/photo-1546410531-bb4caa6b424d'),
-                ('serv_math','cat_education','Reforço Escolar','📚','https://images.unsplash.com/photo-1434030216411-0b793f4b4173'),
-                ('serv_music','cat_education','Aulas de Música','🎵','https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=400&auto=format&fit=crop'),
+                ('serv_painter','cat_home','Pintor','🖌️','https://images.unsplash.com/photo-1589939705384-5185137a7f0f?q=80&w=400&auto=format&fit=crop'),
+                ('serv_carpenter','cat_home','Carpinteiro','🪚','https://images.unsplash.com/photo-1581242163695-1998af59a686?q=80&w=400&auto=format&fit=crop'),
+                ('serv_locksmith','cat_home','Serralheiro','🔑','https://images.unsplash.com/photo-1558227691-41ea78d1f631?q=80&w=400&auto=format&fit=crop'),
+
+                ('serv_mech','cat_auto','Mecânico','🔧','https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?q=80&w=400&auto=format&fit=crop'),
+                ('serv_wash','cat_auto','Lavagem Ecológica','🚿','https://images.unsplash.com/photo-1601362840469-51e4d8d58785?q=80&w=400&auto=format&fit=crop'),
+                ('serv_bodywork','cat_auto','Funileiro','🚗','https://images.unsplash.com/photo-1613521140785-e85e427f8002?q=80&w=400&auto=format&fit=crop'),
+                ('serv_auto_elec','cat_auto','Eletricista Automotivo','🔋','https://images.unsplash.com/photo-1590740645065-27a3c75124b2?q=80&w=400&auto=format&fit=crop'),
+                ('serv_tire','cat_auto','Borracheiro','🛞','https://images.unsplash.com/photo-1580145396556-9d66ebd36d5a?q=80&w=400&auto=format&fit=crop'),
+
                 ('serv_photo','cat_events','Fotógrafo','📸','https://images.unsplash.com/photo-1516035069371-29a1b244cc32'),
                 ('serv_dj','cat_events','DJ e Som','🎧','https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop'),
-                ('serv_buffet','cat_events','Buffet / Churrasqueiro','🍖','https://images.unsplash.com/photo-1555244162-803834f70033'),
+                ('serv_buffet','cat_events','Buffet/Churrasqueiro','🍖','https://images.unsplash.com/photo-1555244162-803834f70033'),
+                ('serv_ceremonialist','cat_events','Cerimonialista','📋','https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=400&auto=format&fit=crop'),
+                ('serv_party_decor','cat_events','Decorador de Festas','🎈','https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80&w=400&auto=format&fit=crop'),
+                ('serv_videomaker','cat_events','Videomaker','🎥','https://images.unsplash.com/photo-1601509315510-9118e9c6a71e?q=80&w=400&auto=format&fit=crop'),
+
                 ('serv_account','cat_business','Contabilidade','📊','https://images.unsplash.com/photo-1554224155-6726b3ff858f'),
                 ('serv_legal','cat_business','Advogado','⚖️','https://images.unsplash.com/photo-1589829085413-56de8ae18c73'),
                 ('serv_trans','cat_business','Tradutor','🗣️','https://images.unsplash.com/photo-1455390582262-044cdead277a'),
-                ('serv_makeup','cat_beauty','Maquiadora','💄','https://images.unsplash.com/photo-1522337660859-02fbefca4702?q=80&w=400&auto=format&fit=crop'),
-                ('serv_hair','cat_beauty','Cabeleireiro(a)','💇','https://images.unsplash.com/photo-1560869713-7d0a29430803'),
-                ('serv_manicure','cat_beauty','Manicure/Pedicure','💅','https://images.unsplash.com/photo-1632345031435-8727f6897d53'),
-                ('serv_barber','cat_beauty','Barbeiro','💈','https://images.unsplash.com/photo-1585747860715-2ba37e788b70?q=80&w=400&auto=format&fit=crop'),
-                ('serv_mech','cat_auto','Mecânico','🔧','https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?q=80&w=400&auto=format&fit=crop'),
-                ('serv_wash','cat_auto','Lavagem Ecológica','🚿','https://images.unsplash.com/photo-1601362840469-51e4d8d58785?q=80&w=400&auto=format&fit=crop'),
-                ('serv_repair_small','cat_auto','Pequenos Reparos','🔨','https://images.unsplash.com/photo-1625047509168-a7026f36de04'),
-                ('serv_crafts','cat_creative','Artesanato Personalizado','🧶','https://images.unsplash.com/photo-1452860606245-08befc0ff44b'),
-                ('serv_sewing','cat_creative','Costura e Reparos','🧵','https://images.unsplash.com/photo-1556740738-b6a63e27c4df'),
-                ('serv_painting_art','cat_creative','Pintura Artística','🖌️','https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b'),
+                ('serv_fin_consultant','cat_business','Consultor Financeiro','💸','https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?q=80&w=400&auto=format&fit=crop'),
+                ('serv_biz_coach','cat_business','Coach Empresarial','📊','https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=400&auto=format&fit=crop'),
+
                 ('serv_pet','cat_community','Passeador de Cães','🐕','https://images.unsplash.com/photo-1583511655857-d19b40a7a54e'),
                 ('serv_delivery','cat_community','Entregas Locais','📦','https://images.unsplash.com/photo-1616401784845-180882ba9ba8'),
-                ('serv_cooking','cat_community','Cozinheira(o) a Domicílio','🍳','https://images.unsplash.com/photo-1556909212-d5b604d0c90d?q=80&w=400&auto=format&fit=crop'),
+                ('serv_cooking','cat_community','Cozinheiro(a) a Domicílio','🍳','https://images.unsplash.com/photo-1556909212-d5b604d0c90d?q=80&w=400&auto=format&fit=crop'),
+                ('serv_nanny','cat_community','Babá','👶','https://images.unsplash.com/photo-1519782500057-0131ea0b3a7d?q=80&w=400&auto=format&fit=crop'),
+                ('serv_detective','cat_community','Detetive Particular','🕵️','https://images.unsplash.com/photo-1582269438706-03f39a4892c5?q=80&w=400&auto=format&fit=crop'),
+
                 ('serv_solar','cat_sustain','Manutenção Solar','☀️','https://images.unsplash.com/photo-1509391366360-2e959784a276'),
                 ('serv_recycle','cat_sustain','Coleta Seletiva','♻️','https://images.unsplash.com/photo-1532996122724-e3c354a0b15b'),
-                ('serv_repair_elect','cat_sustain','Reparo Eletrodomésticos','🔌','https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=400&auto=format&fit=crop') 
+                ('serv_repair_elect','cat_sustain','Reparo de Eletrodomésticos','🔌','https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=400&auto=format&fit=crop'),
+                ('serv_landscaping','cat_sustain','Paisagismo Sustentável','🌳','https://images.unsplash.com/photo-1590483984605-e4179313cb34?q=80&w=400&auto=format&fit=crop'),
+
+                ('serv_crafts','cat_creative','Artesanato Personalizado','🧶','https://images.unsplash.com/photo-1452860606245-08befc0ff44b'),
+                ('serv_sewing','cat_creative','Costura e Reparos','🧵','https://images.unsplash.com/photo-1556740738-b6a63e27c4df'),
+                ('serv_painting_art','cat_creative','Pintura Artística','🎨','https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b'),
+                ('serv_illustrator','cat_creative','Ilustrador','✏️','https://images.unsplash.com/photo-1513364776144-f6bd10684f09?q=80&w=400&auto=format&fit=crop'),
+                ('serv_writer','cat_creative','Escritor/Redator','✍️','https://images.unsplash.com/photo-1455390582262-044cdead277a?q=80&w=400&auto=format&fit=crop')
                 ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, emoji=EXCLUDED.emoji, image_url=EXCLUDED.image_url, category_id=EXCLUDED.category_id;`);
 
             await client.query('COMMIT');
