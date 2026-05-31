@@ -2497,8 +2497,11 @@ async function initDB() {
         } catch (e) {
             await client.query('ROLLBACK');
             console.warn('⚠️ Failed to initialize database:', e);
+            throw e;
         } finally { client.release(); }
     } catch (err: any) {
+        console.error('DB Error:', err.message, err.stack);
+        console.log('DB Connection string host:', process.env.DATABASE_URL?.split('@')[1]);
         console.warn('⚠️ Server running in MOCK MODE (Failed to connect to database)');
         isDbConnected = false;
     }
