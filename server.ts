@@ -96,11 +96,8 @@ cloudinary.config({
 
 const { Pool } = pg;
 const pool = new Pool({ 
-    connectionString: DB_CONNECTION,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 15000,
-    idleTimeoutMillis: 30000,
-    keepAlive: true
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
 // --- EMAIL SERVICE ---
