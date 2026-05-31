@@ -640,18 +640,26 @@ app.get('/api/categories', async (_req, res) => {
     if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM categories ORDER BY name');
-        if (result.rowCount === 0) throw new Error("Empty");
+        console.log(`GET /api/categories returned ${result.rowCount} rows`);
+        if (result.rowCount === 0) return res.json([]);
         res.json(result.rows.map((r: any) => ({ id: r.id, name: r.name, imageUrl: r.image_url })));
-    } catch { res.json([]); }
+    } catch (e: any) { 
+        console.error("Error fetching categories:", e);
+        res.status(500).json({ error: "Erro interno" }); 
+    }
 });
 
 app.get('/api/services', async (_req, res) => {
     if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM services WHERE is_active = true');
-        if (result.rowCount === 0) throw new Error("Empty");
+        console.log(`GET /api/services returned ${result.rowCount} rows`);
+        if (result.rowCount === 0) return res.json([]);
         res.json(result.rows.map((r: any) => ({ id: r.id, categoryId: r.category_id, name: r.name, emoji: r.emoji, isActive: r.is_active, imageUrl: r.image_url })));
-    } catch { res.json([]); }
+    } catch (e: any) { 
+        console.error("Error fetching services:", e);
+        res.status(500).json({ error: "Erro interno" }); 
+    }
 });
 
 
@@ -2439,7 +2447,7 @@ async function initDB() {
 
             await client.query(`INSERT INTO badges (id, name, description, icon) VALUES ('badge_early_adopter','Pioneiro','Um dos primeiros usuários do Linka Jobi.','Rocket'),('badge_verified','Verificado','Documentação aprovada.','ShieldCheck'),('badge_first_job','Primeiro Job','Concluiu o primeiro serviço.','Award'),('badge_top_rated','5 Estrelas','Recebeu 10 avaliações máximas.','Star') ON CONFLICT (id) DO NOTHING;`);
 
-            await client.query(`INSERT INTO categories (id, name, image_url) VALUES 
+            const catsResult = await client.query(`INSERT INTO categories (id, name, image_url) VALUES 
 ('cat_tech','Tecnologia','https://images.unsplash.com/photo-1518770660439-4636190af475'),
 ('cat_health','Saúde & Bem-estar','https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b'),
 ('cat_education','Educação','https://images.unsplash.com/photo-1503676260728-1c00da094a0b'),
@@ -2452,8 +2460,10 @@ async function initDB() {
 ('cat_sustain','Sustentabilidade','https://images.unsplash.com/photo-1542601906990-b4d3fb778b09'),
 ('cat_creative','Economia Criativa','https://images.unsplash.com/photo-1452860606245-08befc0ff44b')
 ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, image_url=EXCLUDED.image_url;`);
+            
+            console.log(`Categories seeded: ${catsResult.rowCount}`);
 
-            await client.query(`INSERT INTO services (id, category_id, name, emoji, image_url) VALUES 
+            const servsResult = await client.query(`INSERT INTO services (id, category_id, name, emoji, image_url) VALUES 
                 ('serv_dev','cat_tech','Desenvolvedor Web/App','💻','https://images.unsplash.com/photo-1498050108023-c5249f4df085'),
                 ('serv_support','cat_tech','Suporte Técnico','🛠️','https://images.unsplash.com/photo-1515378791036-0648a3ef77b2'),
                 ('serv_design','cat_tech','Designer Gráfico','🎨','https://images.unsplash.com/photo-1561070791-2526d30994b5?q=80&w=400&auto=format&fit=crop'),
@@ -2534,6 +2544,8 @@ ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, image_url=EXCLUDED.image_url;
                 ('serv_illustrator','cat_creative','Ilustrador','✏️','https://images.unsplash.com/photo-1513364776144-f6bd10684f09?q=80&w=400&auto=format&fit=crop'),
                 ('serv_writer','cat_creative','Escritor/Redator','✍️','https://images.unsplash.com/photo-1455390582262-044cdead277a?q=80&w=400&auto=format&fit=crop')
                 ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, emoji=EXCLUDED.emoji, image_url=EXCLUDED.image_url, category_id=EXCLUDED.category_id;`);
+            
+            console.log(`Services seeded: ${servsResult.rowCount}`);
 
             await client.query('COMMIT');
             console.log('✅ Database initialized successfully');
@@ -2555,14 +2567,14 @@ async function startServer() {
     console.log('[1/4] Iniciando servidor...');
     console.log('[2/4] Conectando ao banco...');
     
-    // Add a 10-second timeout for the DB initialization so the server doesn't get stuck indefinitely
+    // Add a 45-second timeout for the DB initialization so the server doesn't get stuck indefinitely
     await Promise.race([
         initDB(),
         new Promise(resolve => setTimeout(() => {
-            console.warn('⏳ Timeout conectando ao banco de dados (10s). O servidor vai subir em modo degradado.');
+            console.warn('⏳ Timeout conectando ao banco de dados (45s). O servidor vai subir em modo degradado.');
             isDbConnected = false;
             resolve(null);
-        }, 10000))
+        }, 45000))
     ]);
 
     try {
