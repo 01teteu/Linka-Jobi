@@ -34,6 +34,7 @@ const validate = (schema: z.ZodSchema) => (req: any, res: any, next: any) => {
         next();
     } catch (error: any) {
         if (error && error.errors) {
+            console.error("Validation error inside validate middleware:", error.errors);
             return res.status(400).json({ error: error.errors.map((e: any) => e.message).join(', ') });
         }
         next(error);
@@ -1109,7 +1110,7 @@ app.put('/api/users/:id', authenticate, validate(updateProfileSchema), async (re
         }
 
         return res.json(mapUserToFrontend(user));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao atualizar perfil' }); }
+    } catch (err) { console.error('Error updating user:', err); res.status(500).json({ error: 'Erro ao atualizar perfil' }); }
 });
 
 
@@ -1462,7 +1463,7 @@ app.post('/api/proposals', authenticate, validate(createProposalSchema), async (
     try {
         const result = await pool.query(
             `INSERT INTO propostas (contratante_id, titulo, descricao, area_tag, localizacao, orcamento_estimado, target_professional_id, latitude, longitude, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'OPEN') RETURNING *`,
-            [req.user.id, title, description, areaTag, location, budgetRange, targetProfessionalId, coordinates?.lat, coordinates?.lng]
+            [req.user.id, title, description, areaTag, location, budgetRange, targetProfessionalId || null, coordinates?.lat || null, coordinates?.lng || null]
         );
         
         const newProposal = result.rows[0];
@@ -1506,7 +1507,7 @@ app.post('/api/proposals', authenticate, validate(createProposalSchema), async (
         }
 
         return res.json(mapProposalToFrontend(newProposal, req.user?.id));
-    } catch (err: any) { console.error(err); res.status(500).json({ error: 'Erro ao criar proposta', details: err.message }); }
+    } catch (err: any) { console.error("Error creating proposal details: ", err); res.status(500).json({ error: 'Erro ao criar proposta', details: err.message }); }
 });
 
 app.post('/api/proposals/:id/hire', authenticate, async (req: any, res) => {
@@ -2236,7 +2237,14 @@ app.post('/api/upload', authenticate, userRateLimiter, timeout('2m'), upload.sin
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     
     if (!process.env.CLOUDINARY_API_KEY) {
-        return res.status(500).json({ error: 'Serviço de upload não configurado.' });
+        // Fallback para Base64 interno (para MVP sem Cloudinary)
+        try {
+            const b64 = req.file.buffer.toString('base64');
+            const dataUrl = `data:${req.file.mimetype};base64,${b64}`;
+            return res.json({ url: dataUrl });
+        } catch (e) {
+            return res.status(500).json({ error: 'Falha ao processar imagem.' });
+        }
     }
 
     try {
