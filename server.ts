@@ -637,28 +637,26 @@ app.get('/api/cep/:cep', async (req, res) => {
 });
 
 app.get('/api/categories', async (_req, res) => {
-    if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM categories ORDER BY name');
         console.log(`GET /api/categories returned ${result.rowCount} rows`);
-        if (result.rowCount === 0) return res.json([]);
+        if (result.rowCount === 0) return res.status(500).json({ error: "Nenhuma categoria encontrada." });
         res.json(result.rows.map((r: any) => ({ id: r.id, name: r.name, imageUrl: r.image_url })));
     } catch (e: any) { 
         console.error("Error fetching categories:", e);
-        res.status(500).json({ error: "Erro interno" }); 
+        res.status(500).json({ error: "Erro ao buscar categorias do banco." }); 
     }
 });
 
 app.get('/api/services', async (_req, res) => {
-    if (!isDbConnected) return res.json([]);
     try {
         const result = await pool.query('SELECT * FROM services WHERE is_active = true');
         console.log(`GET /api/services returned ${result.rowCount} rows`);
-        if (result.rowCount === 0) return res.json([]);
+        if (result.rowCount === 0) return res.status(500).json({ error: "Nenhum serviço encontrado." });
         res.json(result.rows.map((r: any) => ({ id: r.id, categoryId: r.category_id, name: r.name, emoji: r.emoji, isActive: r.is_active, imageUrl: r.image_url })));
     } catch (e: any) { 
         console.error("Error fetching services:", e);
-        res.status(500).json({ error: "Erro interno" }); 
+        res.status(500).json({ error: "Erro ao buscar serviços do banco." }); 
     }
 });
 
@@ -857,6 +855,7 @@ app.post('/api/register', registerRateLimiter, validate(registerSchema), async (
                 [name, normalizedEmail, hash, role, finalAvatarUrl, resolvedLocation, phone, specialty, lat, lng]
             );
             user = result.rows[0];
+            console.log('User registered:', result.rows[0].id);
         } else {
             console.log('Register via Memory DB');
             if (MEMORY_USERS.find(u => u.email === normalizedEmail)) {
@@ -926,7 +925,7 @@ app.post('/api/register', registerRateLimiter, validate(registerSchema), async (
         if (err.code === '23505' || err.code === 23505 || errMsg.includes('users_email_key') || errMsg.includes('duplicate key')) {
             return res.status(409).json({ error: 'E-mail já cadastrado.' });
         }
-        console.error('Register Error:', err);
+        console.error('Register Error details:', err.message, err.stack);
         res.status(500).json({ error: 'Erro no registro' });
     }
 });

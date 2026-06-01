@@ -512,11 +512,11 @@ const App: React.FC = () => {
       );
   }
 
-  if (user.id === 0) {
+    if (user.id === 0) {
       return (
         <div className="min-h-[100dvh] bg-gray-100 flex justify-center sm:py-8 text-secondary font-sans selection:bg-primary/20">
           <div className="w-full max-w-md bg-background sm:rounded-[2.5rem] sm:h-[850px] sm:shadow-2xl relative overflow-hidden flex flex-col flex-1 sm:flex-none">
-            <AuthScreens onLogin={handleLoginSuccess} />
+            <AuthScreens onLogin={handleLoginSuccess} services={services || []} />
           </div>
         </div>
       );

@@ -383,13 +383,18 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin, services }) => {
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                                    {services.map(s => {
-                                        const isSelected = specialties.includes(s.name);
-                                        return (
-                                            <button
-                                                key={s.id}
-                                                type="button"
-                                                onClick={() => toggleSpecialty(s.name)}
+                                    {!services || services.length === 0 ? (
+                                        <div className="col-span-2 flex justify-center py-4 text-gray-400">
+                                            <Loader2 size={16} className="animate-spin" />
+                                        </div>
+                                    ) : (
+                                        (services || []).map(s => {
+                                            const isSelected = specialties.includes(s?.name || '');
+                                            return (
+                                                <button
+                                                    key={s?.id || Math.random().toString()}
+                                                    type="button"
+                                                    onClick={() => { if(s?.name) toggleSpecialty(s.name); }}
                                                 className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all text-xs font-bold ${
                                                     isSelected 
                                                     ? 'border-primary bg-primary text-white shadow-md shadow-primary/20' 
@@ -400,7 +405,8 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin, services }) => {
                                                 {isSelected && <Check size={14} className="text-white shrink-0" />}
                                             </button>
                                         );
-                                    })}
+                                        })
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -606,4 +612,35 @@ const AuthScreens: React.FC<AuthScreenProps> = ({ onLogin, services }) => {
   );
 };
 
-export default AuthScreens;
+class AuthErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('AuthError Boundary caught:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-center h-full bg-red-50 text-red-600 rounded-3xl">
+            <h2 className="text-xl font-bold mb-2">Ops, algo deu errado!</h2>
+            <p className="text-sm">Não foi possível carregar a tela de cadastro.</p>
+            <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl font-bold">Recarregar</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function AuthScreensWrapper(props: AuthScreenProps) {
+  return (
+    <AuthErrorBoundary>
+      <AuthScreens {...props} />
+    </AuthErrorBoundary>
+  );
+}

@@ -12,7 +12,7 @@ interface ProfessionalDashboardProps {
 }
 
 const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({ stats, user, onUpdateUser }) => {
-    const isPortfolioIncomplete = !user.portfolio || user.portfolio.length === 0;
+    const isPortfolioIncomplete = !user?.portfolio || user.portfolio.length === 0;
     const [activeTab, setActiveTab] = useState<'portfolio' | 'overview'>(isPortfolioIncomplete ? 'portfolio' : 'overview');
 
     // Force portfolio tab if incomplete
@@ -20,7 +20,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({ stats, us
         setActiveTab('portfolio');
     }
 
-    const maxChartValue = Math.max(...stats.chartData.map(d => d.jobs), 5);
+    const maxChartValue = Math.max(...(stats?.chartData?.map(d => d.jobs) || [0]), 5);
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
 
@@ -87,13 +87,13 @@ import { Reorder } from 'framer-motion';
 const PortfolioTab = ({ user, onUpdateUser }: { user: User, onUpdateUser: (data: Partial<User>) => Promise<void> }) => {
     const { addToast } = useToast();
     const [formData, setFormData] = useState({
-        name: user.name,
-        specialty: user.specialty || '',
-        avatarUrl: user.avatarUrl || '',
-        bio: user.bio || '',
-        portfolioImages: user.portfolio || [],
-        services: user.services || [],
-        coverUrl: user.coverUrl || ''
+        name: user?.name || '',
+        specialty: user?.specialty || '',
+        avatarUrl: user?.avatarUrl || '',
+        bio: user?.bio || '',
+        portfolioImages: user?.portfolio || [],
+        services: user?.services || [],
+        coverUrl: user?.coverUrl || ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -790,35 +790,41 @@ const OverviewTab = ({ stats, formatCurrency, maxChartValue }: any) => (
                             <div className="w-full h-px bg-gray-200 border-dashed"></div>
                         </div>
 
-                        {stats.chartData.map((data: any, index: number) => {
-                            const heightPct = Math.max((data.jobs / maxChartValue) * 100, 8);
-                            const isToday = data.day === 'Sex'; // Mock logic for 'Today' highlight
-                            
-                            return (
-                                <div key={index} className="flex flex-col items-center justify-end h-full w-full group cursor-pointer">
-                                    <div className="relative w-full max-w-[40px] h-full flex items-end">
-                                        <div 
-                                            className={`w-full rounded-t-2xl transition-all duration-700 ease-out relative overflow-hidden ${
-                                                isToday 
-                                                ? 'bg-gradient-to-t from-primary to-violet-400 shadow-lg shadow-primary/30' 
-                                                : 'bg-gray-100 group-hover:bg-primaryLight'
-                                            }`}
-                                            style={{ height: `${heightPct}%` }}
-                                        >
-                                            {/* Bar Shine Effect */}
-                                            {isToday && <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/30 to-transparent"></div>}
+                        {(!stats?.chartData || stats.chartData.length === 0) ? (
+                            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-400">
+                                Sem dados para o gráfico
+                            </div>
+                        ) : (
+                            stats.chartData.map((data: any, index: number) => {
+                                const heightPct = Math.max((data.jobs / maxChartValue) * 100, 8);
+                                const isToday = data.day === 'Sex'; // Mock logic for 'Today' highlight
+                                
+                                return (
+                                    <div key={index} className="flex flex-col items-center justify-end h-full w-full group cursor-pointer">
+                                        <div className="relative w-full max-w-[40px] h-full flex items-end">
+                                            <div 
+                                                className={`w-full rounded-t-2xl transition-all duration-700 ease-out relative overflow-hidden ${
+                                                    isToday 
+                                                    ? 'bg-gradient-to-t from-primary to-violet-400 shadow-lg shadow-primary/30' 
+                                                    : 'bg-gray-100 group-hover:bg-primaryLight'
+                                                }`}
+                                                style={{ height: `${heightPct}%` }}
+                                            >
+                                                {/* Bar Shine Effect */}
+                                                {isToday && <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/30 to-transparent"></div>}
+                                            </div>
+                                            
+                                            {/* Tooltip */}
+                                            <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-xl whitespace-nowrap z-20 pointer-events-none transform translate-y-2 group-hover:translate-y-0">
+                                                {data.jobs} Jobs
+                                                <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-secondary rotate-45"></div>
+                                            </div>
                                         </div>
-                                        
-                                        {/* Tooltip */}
-                                        <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-xl whitespace-nowrap z-20 pointer-events-none transform translate-y-2 group-hover:translate-y-0">
-                                            {data.jobs} Jobs
-                                            <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-secondary rotate-45"></div>
-                                        </div>
+                                        <span className={`text-[10px] font-bold mt-4 uppercase ${isToday ? 'text-primary' : 'text-gray-400'}`}>{data.day}</span>
                                     </div>
-                                    <span className={`text-[10px] font-bold mt-4 uppercase ${isToday ? 'text-primary' : 'text-gray-400'}`}>{data.day}</span>
-                                </div>
-                            );
-                        })}
+                                );
+                            })
+                        )}
                     </div>
                 </div>
 
@@ -830,29 +836,28 @@ const OverviewTab = ({ stats, formatCurrency, maxChartValue }: any) => (
                     </div>
                     
                     <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar max-h-[350px]">
-                        {stats.recentReviews.map((review: any, idx: number) => (
-                            <div key={review.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative">
-                                <div className="absolute top-4 right-4 text-gray-300 opacity-20">
-                                    <QuoteIcon />
-                                </div>
-                                <div className="flex items-center gap-2 mb-3">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-xs font-black text-gray-500 border border-white shadow-sm">
-                                        {review.reviewerName.charAt(0)}
+                        {(!stats?.recentReviews || stats.recentReviews.length === 0) ? (
+                            <div className="text-center py-8 text-gray-400 text-sm font-bold">Nenhum feedback ainda.</div>
+                        ) : (
+                            stats.recentReviews.map((review: any, idx: number) => (
+                                <div key={review.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative">
+                                    <div className="absolute top-4 right-4 text-gray-300 opacity-20">
+                                        <QuoteIcon />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-secondary">{review.reviewerName}</p>
-                                        <div className="flex text-yellow-400 gap-0.5">
-                                            {[...Array(review.rating)].map((_, i) => <Star key={i} size={8} fill="currentColor"/>)}
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-xs font-black text-gray-500 border border-white shadow-sm">
+                                            {review.reviewerName.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-secondary">{review.reviewerName}</p>
+                                            <div className="flex text-yellow-400 gap-0.5">
+                                                {[...Array(review.rating)].map((_, i) => <Star key={i} size={8} fill="currentColor"/>)}
+                                            </div>
                                         </div>
                                     </div>
+                                    <p className="text-xs text-secondary/80 font-medium leading-relaxed">"{review.comment}"</p>
                                 </div>
-                                <p className="text-xs text-secondary/80 font-medium leading-relaxed">"{review.comment}"</p>
-                            </div>
-                        ))}
-                        {stats.recentReviews.length === 0 && (
-                            <div className="text-center py-10 opacity-50">
-                                <p className="text-xs font-bold">Sem avaliações recentes.</p>
-                            </div>
+                            ))
                         )}
                     </div>
                 </div>
@@ -875,4 +880,35 @@ const QuoteIcon = () => (
     </svg>
 );
 
-export default ProfessionalDashboard;
+class DashboardErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('Dashboard Error Boundary caught:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-center h-full bg-red-50 text-red-600 rounded-3xl">
+            <h2 className="text-xl font-bold mb-2">Ops, algo deu errado!</h2>
+            <p className="text-sm">Não foi possível carregar o dashboard do profissional.</p>
+            <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl font-bold">Recarregar</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function ProfessionalDashboardWrapper(props: ProfessionalDashboardProps) {
+  return (
+    <DashboardErrorBoundary>
+      <ProfessionalDashboard {...props} />
+    </DashboardErrorBoundary>
+  );
+}
